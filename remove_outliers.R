@@ -1,8 +1,5 @@
-# Dry Bean logical-boundary and statistical-outlier analysis.
-# Missing values and duplicate rows are intentionally left for a separate script.
-# Usage:
+# Naudojimas:
 #   Rscript remove_outliers.R
-#   Rscript remove_outliers.R input.csv cleaned.csv report.csv correlations.csv
 
 args <- commandArgs(trailingOnly = TRUE)
 input_file <- if (length(args) >= 1) args[1] else "A21.csv"
@@ -40,7 +37,7 @@ invalid_value_report <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# Normalize numeric fields, including values such as "1132.4 px".
+# Sutvarkomi skaitiniai laukai, įskaitant tokias reikšmes kaip „1132.4 px“.
 for (column_name in numeric_columns) {
   original_values <- data[[column_name]]
   cleaned_values <- gsub("[^0-9eE+.-]", "", original_values)
@@ -62,7 +59,7 @@ for (column_name in numeric_columns) {
   data[[column_name]] <- numeric_values
 }
 
-# Logical constraints for the documented Dry Bean measurements.
+# Dokumentacijoje nurodytų „Dry Bean“ matavimų loginės sąlygos.
 logical_violation_flags <- matrix(
   FALSE,
   nrow = nrow(data),
@@ -84,7 +81,7 @@ for (column_name in numeric_columns) {
   logical_violation_flags[, column_name] <- invalid
 }
 
-# Geometric relationships that must hold between derived measurements.
+# Geometriniai ryšiai, kurie turi galioti tarp išvestinių matavimų.
 logical_violation_flags[, "ConvexArea"] <- logical_violation_flags[, "ConvexArea"] |
   (!is.na(data$Area) & !is.na(data$ConvexArea) & data$ConvexArea < data$Area)
 logical_violation_flags[, "MajorAxisLength"] <- logical_violation_flags[, "MajorAxisLength"] |
@@ -97,7 +94,7 @@ logical_violation_rows <- if (nrow(data) > 0) {
   logical(0)
 }
 
-# Calculate IQR fences while ignoring missing values; missing rows are not removed.
+# Apskaičiuojamos IQR ribos ignoruojant trūkstamas reikšmes; eilutės su trūkstamomis reikšmėmis nešalinamos.
 outlier_flags <- matrix(
   FALSE,
   nrow = nrow(data),
@@ -138,7 +135,7 @@ statistical_outlier_rows <- if (nrow(data) > 0) apply(outlier_flags, 1, any) els
 rows_to_remove <- logical_violation_rows | statistical_outlier_rows
 cleaned_data <- data[!rows_to_remove, , drop = FALSE]
 
-# Verify only the responsibilities of this script were applied.
+# Patikrinama, ar pritaikytos tik šio scenarijaus atsakomybės.
 if (nrow(cleaned_data) > 0 &&
     any(apply(logical_violation_flags[!rows_to_remove, , drop = FALSE], 1, any))) {
   stop("Cleaning failed: logical boundary violations remain.")
