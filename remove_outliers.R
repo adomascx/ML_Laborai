@@ -44,9 +44,7 @@ row_count <- nrow(data)
 column_count <- length(numeric_columns)
 bounded_columns <- c("Eccentricity", "Extent", "Solidity", "roundness", "Compactness")
 
-# ---------------------------------------------------------------------------
-# 1 žingsnis: sutvarkyti skaitinius stulpelius (pašalinti vienetus, pvz. "1132.4 px")
-# ---------------------------------------------------------------------------
+# -----------------------------------Skaitiniu stulpeliu sutvarkymas----------------------------------------
 
 clean_number_text <- function(text) {
   cleaned <- gsub("[^0-9eE+.-]", "", text)
@@ -89,16 +87,13 @@ for (column_name in numeric_columns) {
   total_invalid_values <- total_invalid_values + invalid_value_counts[[column_name]]
 }
 
-# Kiekvieno skaitinio stulpelio reikšmės, pasiimtos vieną kartą, kad ciklų
-# viduje nereikėtų kaskart iš naujo skaityti iš data rėmelio.
+# Kiekvieno skaitinio stulpelio reikšmės, pasiimtos vieną kartą, kad nereikėtų kaskart iš naujo skaityti.
 column_values <- list()
 for (column_name in numeric_columns) {
   column_values[[column_name]] <- data[[column_name]]
 }
 
-# ---------------------------------------------------------------------------
-# 2 žingsnis: patikrinti logines "Dry Bean" duomenų sąlygas kiekvienoje eilutėje
-# ---------------------------------------------------------------------------
+# ----------------------------------Patikrinimas loginiu duomenu rysiu---------------------------------------
 
 logical_violation <- list()
 for (column_name in numeric_columns) {
@@ -151,11 +146,7 @@ for (row_index in seq_len(row_count)) {
   }
 }
 
-# ---------------------------------------------------------------------------
-# 3 žingsnis: apskaičiuoti IQR ribas kiekvienam stulpeliui ir pažymėti išskirtis
-#             (trūkstamos reikšmės ir loginiai pažeidimai į ribų skaičiavimą
-#             neįtraukiami, bet eilutės dėl jų iš duomenų nešalinamos šiame žingsnyje)
-# ---------------------------------------------------------------------------
+# ------------------------------------Isskirtys pagal IQR---------------------------------------
 
 outlier_flag <- list()
 for (column_name in numeric_columns) {
@@ -213,10 +204,7 @@ for (row_index in seq_len(row_count)) {
   }
 }
 
-# ---------------------------------------------------------------------------
-# 4 žingsnis: pašalinti eilutes, kurios pažeidžia logines sąlygas arba yra
-#             statistinės išskirtys
-# ---------------------------------------------------------------------------
+# ---------------------------------Loginiu salygu pazeidimu ir isskirciu salynimas------------------------------------------
 
 rows_to_remove <- rep(FALSE, row_count)
 for (row_index in seq_len(row_count)) {
@@ -225,8 +213,7 @@ for (row_index in seq_len(row_count)) {
 
 cleaned_data <- data[!rows_to_remove, , drop = FALSE]
 
-# Patikrinama, ar pritaikytos tik šio scenarijaus atsakomybės (likusiose
-# eilutėse neturėtų likti loginių pažeidimų).
+# Patikrinama, ar nelieka loginiu pazeidimu
 for (row_index in seq_len(row_count)) {
   if (!rows_to_remove[row_index] && logical_violation_rows[row_index]) {
     stop("Cleaning failed: logical boundary violations remain.")
@@ -235,9 +222,7 @@ for (row_index in seq_len(row_count)) {
 
 write.csv(cleaned_data, output_file, row.names = FALSE, na = "")
 
-# ---------------------------------------------------------------------------
-# 5 žingsnis: parašyti ataskaitas
-# ---------------------------------------------------------------------------
+# ----------------------------------Ataskaitos---------------------------------------
 
 fence_report <- data.frame(
   column = numeric_columns,
