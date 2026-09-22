@@ -1,6 +1,3 @@
-# Naudojimas:
-#   Rscript remove_outliers.R
-
 args <- commandArgs(trailingOnly = TRUE)
 input_file <- if (length(args) >= 1) args[1] else "A21.csv"
 output_file <- if (length(args) >= 2) args[2] else "A21_without_outliers.csv"
@@ -9,7 +6,7 @@ correlation_file <- if (length(args) >= 4) args[4] else "A21_feature_correlation
 iqr_multiplier <- 1.5
 
 if (!file.exists(input_file)) {
-  stop(sprintf("Input file does not exist: %s", input_file))
+  stop(paste("Input file does not exist:", input_file))
 }
 
 data <- read.csv(
@@ -25,123 +22,246 @@ required_columns <- c(
   "Extent", "Solidity", "roundness", "Compactness", "ShapeFactor1",
   "ShapeFactor2", "ShapeFactor3", "ShapeFactor4", "class"
 )
-missing_columns <- setdiff(required_columns, names(data))
+
+missing_columns <- c()
+for (column_name in required_columns) {
+  if (!(column_name %in% names(data))) {
+    missing_columns <- c(missing_columns, column_name)
+  }
+}
 if (length(missing_columns) > 0) {
-  stop(sprintf("Missing required columns: %s", paste(missing_columns, collapse = ", ")))
+  stop(paste("Missing required columns:", paste(missing_columns, collapse = ", ")))
 }
 
-numeric_columns <- setdiff(names(data), "class")
-invalid_value_report <- data.frame(
-  column = character(),
-  invalid_values = integer(),
-  stringsAsFactors = FALSE
-)
-
-# Sutvarkomi skaitiniai laukai, įskaitant tokias reikšmes kaip „1132.4 px“.
-for (column_name in numeric_columns) {
-  original_values <- data[[column_name]]
-  cleaned_values <- gsub("[^0-9eE+.-]", "", original_values)
-  cleaned_values[cleaned_values == ""] <- NA_character_
-  numeric_values <- suppressWarnings(as.numeric(cleaned_values))
-  invalid_count <- sum(!is.na(original_values) & is.na(numeric_values))
-
-  if (invalid_count > 0) {
-    invalid_value_report <- rbind(
-      invalid_value_report,
-      data.frame(
-        column = column_name,
-        invalid_values = invalid_count,
-        stringsAsFactors = FALSE
-      )
-    )
+numeric_columns <- c()
+for (column_name in names(data)) {
+  if (column_name != "class") {
+    numeric_columns <- c(numeric_columns, column_name)
   }
-
-  data[[column_name]] <- numeric_values
 }
 
-# Dokumentacijoje nurodytų „Dry Bean“ matavimų loginės sąlygos.
-logical_violation_flags <- matrix(
-  FALSE,
-  nrow = nrow(data),
-  ncol = length(numeric_columns),
-  dimnames = list(NULL, numeric_columns)
-)
+row_count <- nrow(data)
+column_count <- length(numeric_columns)
+bounded_columns <- c("Eccentricity", "Extent", "Solidity", "roundness", "Compactness")
+
+# ---------------------------------------------------------------------------
+# 1 žingsnis: sutvarkyti skaitinius stulpelius (pašalinti vienetus, pvz. "1132.4 px")
+# ---------------------------------------------------------------------------
+
+clean_number_text <- function(text) {
+  cleaned <- gsub("[^0-9eE+.-]", "", text)
+  if (cleaned == "") {
+    return(NA_character_)
+  }
+  return(cleaned)
+}
+
+invalid_value_counts <- list()
+for (column_name in numeric_columns) {
+  invalid_value_counts[[column_name]] <- 0
+}
 
 for (column_name in numeric_columns) {
-  values <- data[[column_name]]
-  invalid <- !is.na(values) & values <= 0
+  original_column <- data[[column_name]]
+  cleaned_column <- rep(NA_real_, row_count)
 
-  if (column_name %in% c("Eccentricity", "Extent", "Solidity", "roundness", "Compactness")) {
-    invalid <- invalid | (!is.na(values) & values > 1)
-  }
-  if (column_name == "AspectRation") {
-    invalid <- invalid | (!is.na(values) & values < 1)
+  for (row_index in seq_len(row_count)) {
+    original_value <- original_column[row_index]
+
+    if (is.na(original_value)) {
+      next
+    }
+
+    numeric_value <- suppressWarnings(as.numeric(clean_number_text(original_value)))
+
+    if (is.na(numeric_value)) {
+      invalid_value_counts[[column_name]] <- invalid_value_counts[[column_name]] + 1
+    }
+
+    cleaned_column[row_index] <- numeric_value
   }
 
-  logical_violation_flags[, column_name] <- invalid
+  data[[column_name]] <- cleaned_column
 }
 
-# Geometriniai ryšiai, kurie turi galioti tarp išvestinių matavimų.
-logical_violation_flags[, "ConvexArea"] <- logical_violation_flags[, "ConvexArea"] |
-  (!is.na(data$Area) & !is.na(data$ConvexArea) & data$ConvexArea < data$Area)
-logical_violation_flags[, "MajorAxisLength"] <- logical_violation_flags[, "MajorAxisLength"] |
-  (!is.na(data$MajorAxisLength) & !is.na(data$MinorAxisLength) &
-     data$MajorAxisLength < data$MinorAxisLength)
-
-logical_violation_rows <- if (nrow(data) > 0) {
-  apply(logical_violation_flags, 1, any)
-} else {
-  logical(0)
+total_invalid_values <- 0
+for (column_name in numeric_columns) {
+  total_invalid_values <- total_invalid_values + invalid_value_counts[[column_name]]
 }
 
-# Apskaičiuojamos IQR ribos ignoruojant trūkstamas reikšmes; eilutės su trūkstamomis reikšmėmis nešalinamos.
-outlier_flags <- matrix(
-  FALSE,
-  nrow = nrow(data),
-  ncol = length(numeric_columns),
-  dimnames = list(NULL, numeric_columns)
-)
-fence_report <- data.frame(
-  column = numeric_columns,
-  lower_fence = rep(NA_real_, length(numeric_columns)),
-  upper_fence = rep(NA_real_, length(numeric_columns)),
-  outlier_values = rep(0L, length(numeric_columns)),
-  logical_boundary_violations = rep(0L, length(numeric_columns)),
-  stringsAsFactors = FALSE
-)
+# Kiekvieno skaitinio stulpelio reikšmės, pasiimtos vieną kartą, kad ciklų
+# viduje nereikėtų kaskart iš naujo skaityti iš data rėmelio.
+column_values <- list()
+for (column_name in numeric_columns) {
+  column_values[[column_name]] <- data[[column_name]]
+}
+
+# ---------------------------------------------------------------------------
+# 2 žingsnis: patikrinti logines "Dry Bean" duomenų sąlygas kiekvienoje eilutėje
+# ---------------------------------------------------------------------------
+
+logical_violation <- list()
+for (column_name in numeric_columns) {
+  logical_violation[[column_name]] <- rep(FALSE, row_count)
+}
+
+for (row_index in seq_len(row_count)) {
+  for (column_name in numeric_columns) {
+    value <- column_values[[column_name]][row_index]
+
+    if (is.na(value)) {
+      next
+    }
+
+    violation <- value <= 0
+
+    if (column_name %in% bounded_columns && value > 1) {
+      violation <- TRUE
+    }
+    if (column_name == "AspectRation" && value < 1) {
+      violation <- TRUE
+    }
+
+    if (violation) {
+      logical_violation[[column_name]][row_index] <- TRUE
+    }
+  }
+
+  # Geometriniai ryšiai, kurie turi galioti tarp išvestinių matavimų.
+  area <- column_values[["Area"]][row_index]
+  convex_area <- column_values[["ConvexArea"]][row_index]
+  if (!is.na(area) && !is.na(convex_area) && convex_area < area) {
+    logical_violation[["ConvexArea"]][row_index] <- TRUE
+  }
+
+  major_axis <- column_values[["MajorAxisLength"]][row_index]
+  minor_axis <- column_values[["MinorAxisLength"]][row_index]
+  if (!is.na(major_axis) && !is.na(minor_axis) && major_axis < minor_axis) {
+    logical_violation[["MajorAxisLength"]][row_index] <- TRUE
+  }
+}
+
+logical_violation_rows <- rep(FALSE, row_count)
+for (row_index in seq_len(row_count)) {
+  for (column_name in numeric_columns) {
+    if (logical_violation[[column_name]][row_index]) {
+      logical_violation_rows[row_index] <- TRUE
+      break
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# 3 žingsnis: apskaičiuoti IQR ribas kiekvienam stulpeliui ir pažymėti išskirtis
+#             (trūkstamos reikšmės ir loginiai pažeidimai į ribų skaičiavimą
+#             neįtraukiami, bet eilutės dėl jų iš duomenų nešalinamos šiame žingsnyje)
+# ---------------------------------------------------------------------------
+
+outlier_flag <- list()
+for (column_name in numeric_columns) {
+  outlier_flag[[column_name]] <- rep(FALSE, row_count)
+}
+
+lower_fence_by_column <- list()
+upper_fence_by_column <- list()
+outlier_count_by_column <- list()
+logical_violation_count_by_column <- list()
 
 for (column_name in numeric_columns) {
-  values <- data[[column_name]]
-  reference_values <- values[!is.na(values) & !logical_violation_flags[, column_name]]
+  values <- column_values[[column_name]]
+  violations <- logical_violation[[column_name]]
+
+  reference_values <- c()
+  for (row_index in seq_len(row_count)) {
+    if (!is.na(values[row_index]) && !violations[row_index]) {
+      reference_values <- c(reference_values, values[row_index])
+    }
+  }
+
+  lower_fence <- NA_real_
+  upper_fence <- NA_real_
+  outlier_count <- 0
 
   if (length(reference_values) >= 2) {
     quartiles <- quantile(reference_values, probs = c(0.25, 0.75), names = FALSE)
     iqr_value <- quartiles[2] - quartiles[1]
     lower_fence <- quartiles[1] - iqr_multiplier * iqr_value
     upper_fence <- quartiles[2] + iqr_multiplier * iqr_value
-    column_flags <- !is.na(values) & (values < lower_fence | values > upper_fence)
 
-    outlier_flags[, column_name] <- column_flags
-    fence_report[fence_report$column == column_name, c("lower_fence", "upper_fence")] <-
-      c(lower_fence, upper_fence)
-    fence_report[fence_report$column == column_name, "outlier_values"] <- sum(column_flags)
+    for (row_index in seq_len(row_count)) {
+      value <- values[row_index]
+      if (!is.na(value) && (value < lower_fence || value > upper_fence)) {
+        outlier_flag[[column_name]][row_index] <- TRUE
+        outlier_count <- outlier_count + 1
+      }
+    }
   }
 
-  fence_report[fence_report$column == column_name, "logical_boundary_violations"] <-
-    sum(logical_violation_flags[, column_name])
+  lower_fence_by_column[[column_name]] <- lower_fence
+  upper_fence_by_column[[column_name]] <- upper_fence
+  outlier_count_by_column[[column_name]] <- outlier_count
+  logical_violation_count_by_column[[column_name]] <- sum(violations)
 }
 
-statistical_outlier_rows <- if (nrow(data) > 0) apply(outlier_flags, 1, any) else logical(0)
-rows_to_remove <- logical_violation_rows | statistical_outlier_rows
+statistical_outlier_rows <- rep(FALSE, row_count)
+for (row_index in seq_len(row_count)) {
+  for (column_name in numeric_columns) {
+    if (outlier_flag[[column_name]][row_index]) {
+      statistical_outlier_rows[row_index] <- TRUE
+      break
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# 4 žingsnis: pašalinti eilutes, kurios pažeidžia logines sąlygas arba yra
+#             statistinės išskirtys
+# ---------------------------------------------------------------------------
+
+rows_to_remove <- rep(FALSE, row_count)
+for (row_index in seq_len(row_count)) {
+  rows_to_remove[row_index] <- logical_violation_rows[row_index] || statistical_outlier_rows[row_index]
+}
+
 cleaned_data <- data[!rows_to_remove, , drop = FALSE]
 
-# Patikrinama, ar pritaikytos tik šio scenarijaus atsakomybės.
-if (nrow(cleaned_data) > 0 &&
-    any(apply(logical_violation_flags[!rows_to_remove, , drop = FALSE], 1, any))) {
-  stop("Cleaning failed: logical boundary violations remain.")
+# Patikrinama, ar pritaikytos tik šio scenarijaus atsakomybės (likusiose
+# eilutėse neturėtų likti loginių pažeidimų).
+for (row_index in seq_len(row_count)) {
+  if (!rows_to_remove[row_index] && logical_violation_rows[row_index]) {
+    stop("Cleaning failed: logical boundary violations remain.")
+  }
 }
 
 write.csv(cleaned_data, output_file, row.names = FALSE, na = "")
+
+# ---------------------------------------------------------------------------
+# 5 žingsnis: parašyti ataskaitas
+# ---------------------------------------------------------------------------
+
+fence_report <- data.frame(
+  column = numeric_columns,
+  lower_fence = rep(NA_real_, column_count),
+  upper_fence = rep(NA_real_, column_count),
+  outlier_values = rep(0L, column_count),
+  logical_boundary_violations = rep(0L, column_count),
+  stringsAsFactors = FALSE
+)
+
+for (column_index in seq_len(column_count)) {
+  column_name <- numeric_columns[column_index]
+  fence_report$lower_fence[column_index] <- lower_fence_by_column[[column_name]]
+  fence_report$upper_fence[column_index] <- upper_fence_by_column[[column_name]]
+  fence_report$outlier_values[column_index] <- outlier_count_by_column[[column_name]]
+  fence_report$logical_boundary_violations[column_index] <- logical_violation_count_by_column[[column_name]]
+}
+
+write.csv(fence_report, report_file, row.names = FALSE)
+
+missing_value_count <- 0
+for (column_name in names(data)) {
+  missing_value_count <- missing_value_count + sum(is.na(data[[column_name]]))
+}
 
 summary_file <- sub("\\.csv$", "_summary.csv", report_file)
 summary_report <- data.frame(
@@ -152,27 +272,26 @@ summary_report <- data.frame(
     "duplicate_rows_left_untouched"
   ),
   value = c(
-    nrow(data), sum(logical_violation_rows), sum(statistical_outlier_rows),
+    row_count, sum(logical_violation_rows), sum(statistical_outlier_rows),
     sum(rows_to_remove), nrow(cleaned_data),
-    sum(invalid_value_report$invalid_values), sum(is.na(data)),
+    total_invalid_values, missing_value_count,
     sum(duplicated(data))
   ),
   stringsAsFactors = FALSE
 )
 write.csv(summary_report, summary_file, row.names = FALSE)
-write.csv(fence_report, report_file, row.names = FALSE)
 
-if (nrow(data) >= 2) {
+if (row_count >= 2) {
   feature_correlations <- cor(data[numeric_columns], use = "pairwise.complete.obs")
 } else {
   feature_correlations <- matrix(
-    NA_real_, nrow = length(numeric_columns), ncol = length(numeric_columns),
+    NA_real_, nrow = column_count, ncol = column_count,
     dimnames = list(numeric_columns, numeric_columns)
   )
 }
 write.csv(feature_correlations, correlation_file, row.names = TRUE)
 
-cat(sprintf("Rows before: %d\n", nrow(data)))
+cat(sprintf("Rows before: %d\n", row_count))
 cat(sprintf("Logical-boundary rows removed: %d\n", sum(logical_violation_rows)))
 cat(sprintf("Statistical-outlier rows removed: %d\n", sum(statistical_outlier_rows)))
 cat(sprintf("Rows after: %d\n", nrow(cleaned_data)))
