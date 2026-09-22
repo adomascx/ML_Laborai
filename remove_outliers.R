@@ -1,3 +1,5 @@
+#negaliu pakesti R kalbos. Tragedija. Jau geriau viska daryt sausu SQL
+
 args <- commandArgs(trailingOnly = TRUE)
 input_file <- if (length(args) >= 1) args[1] else "A21.csv"
 output_file <- if (length(args) >= 2) args[2] else "A21_without_outliers.csv"
