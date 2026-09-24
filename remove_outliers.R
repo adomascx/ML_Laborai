@@ -265,7 +265,7 @@ summary_report <- data.frame(
     sum(rows_to_remove), nrow(cleaned_data),
     total_invalid_values, missing_value_count,
     duplicate_rows_removed <- sum(duplicated_rows),
-    sum(duplicated(data))
+    sum(duplicated(cleaned_data))
   ),
   stringsAsFactors = FALSE
 )
