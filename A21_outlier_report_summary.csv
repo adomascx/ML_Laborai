@@ -2,8 +2,9 @@
 "rows_before",3509
 "logical_boundary_rows_removed",87
 "statistical_outlier_rows_removed",965
-"rows_removed_total",965
-"rows_after",2544
+"rows_removed_total",992
+"rows_after",2517
 "invalid_values_converted_to_NA",35
 "missing_values_left_untouched",242
-"duplicate_rows_left_untouched",35
+"duplicate_rows_removed",35
+"duplicate_rows_left_untouched",0
