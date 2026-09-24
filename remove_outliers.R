@@ -207,10 +207,11 @@ for (row_index in seq_len(row_count)) {
 }
 
 # ---------------------------------Loginiu salygu pazeidimu ir isskirciu salynimas------------------------------------------
+duplicated_rows <- duplicated(data)
 
 rows_to_remove <- rep(FALSE, row_count)
 for (row_index in seq_len(row_count)) {
-  rows_to_remove[row_index] <- logical_violation_rows[row_index] || statistical_outlier_rows[row_index]
+  rows_to_remove[row_index] <- logical_violation_rows[row_index] || statistical_outlier_rows[row_index] || duplicated_rows[row_index]
 }
 
 cleaned_data <- data[!rows_to_remove, , drop = FALSE]
@@ -256,12 +257,14 @@ summary_report <- data.frame(
     "rows_before", "logical_boundary_rows_removed",
     "statistical_outlier_rows_removed", "rows_removed_total", "rows_after",
     "invalid_values_converted_to_NA", "missing_values_left_untouched",
+    "duplicate_rows_removed",
     "duplicate_rows_left_untouched"
   ),
   value = c(
     row_count, sum(logical_violation_rows), sum(statistical_outlier_rows),
     sum(rows_to_remove), nrow(cleaned_data),
     total_invalid_values, missing_value_count,
+    duplicate_rows_removed <- sum(duplicate_rows),
     sum(duplicated(data))
   ),
   stringsAsFactors = FALSE
