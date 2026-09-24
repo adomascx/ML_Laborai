@@ -264,7 +264,7 @@ summary_report <- data.frame(
     row_count, sum(logical_violation_rows), sum(statistical_outlier_rows),
     sum(rows_to_remove), nrow(cleaned_data),
     total_invalid_values, missing_value_count,
-    duplicate_rows_removed <- sum(duplicate_rows),
+    duplicate_rows_removed <- sum(duplicated_rows),
     sum(duplicated(data))
   ),
   stringsAsFactors = FALSE
