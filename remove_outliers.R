@@ -2,9 +2,9 @@
 
 args <- commandArgs(trailingOnly = TRUE)
 input_file <- if (length(args) >= 1) args[1] else "A21.csv"
-output_file <- if (length(args) >= 2) args[2] else "A21_without_outliers.csv"
-report_file <- if (length(args) >= 3) args[3] else "A21_outlier_report.csv"
-correlation_file <- if (length(args) >= 4) args[4] else "A21_feature_correlations.csv"
+output_file <- if (length(args) >= 2) args[2] else "results/A21_without_outliers.csv"
+report_file <- if (length(args) >= 3) args[3] else "results/A21_outlier_report.csv"
+correlation_file <- if (length(args) >= 4) args[4] else "results/A21_feature_correlations.csv"
 iqr_multiplier <- 1.5
 
 if (!file.exists(input_file)) {
