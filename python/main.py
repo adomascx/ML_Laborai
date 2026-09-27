@@ -106,6 +106,7 @@ numeric_missing_raw.to_csv(
 
 
 # Eccentricity checks and calculations, validates minor and major axes for them
+# Eccentricity = sqrt(1 - (minor_axis / major_axis)^2)
 major_axis = numeric_data["MajorAxisLength"]
 minor_axis = numeric_data["MinorAxisLength"]
 
@@ -132,7 +133,29 @@ numeric_data.loc[
 
 numeric_data.to_csv(output_file, index=False) 
 
+# Roundness checks and calculations, validates area and perimeter for them
+# Roundness = (4 * pi * area) / (perimeter^2)
+area = numeric_data["Area"]
+perimeter = numeric_data["Perimeter"]
 
+valid_roundness_values = (
+    area.notna()
+    & perimeter.notna()
+    & (area > 0)
+    & (perimeter > 0)
+)
+
+calculated_roundness = (4 * np.pi * area) / (perimeter ** 2)
+
+missing_roundness = (
+    numeric_data["roundness"].isna()
+    & valid_roundness_values
+)
+
+numeric_data.loc[
+    missing_roundness,
+    "roundness"
+] = calculated_roundness[missing_roundness]
 
 # Second check for any missing values to validate that the cleaning process worked
 numeric_missing_clean = (
