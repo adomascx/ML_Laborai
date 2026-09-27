@@ -28,6 +28,34 @@ data.to_csv(original_data_file, index=False)
 original_data = data.copy()
 
 
+# Duplicate countand removal
+
+duplicate_mask = data.duplicated(keep="first")                      # Binary mask of duplicates for rows
+duplicate_rows_count = duplicate_mask.sum()                         # Calculates the number of TRUE values
+duplicates_removed_count = data.duplicated(keep="first").sum()      # Calculates the amount of duplicates that will be removed
+
+duplicate_rows = data[duplicate_mask]
+duplicate_rows.to_csv(
+    script_dir / "duplicate_rows.csv",
+    index=False
+)
+
+data = data.drop_duplicates(ignore_index=True)                      # Removes duplicates and resets the index
+
+# Save duplicate statistics
+duplicate_report = pd.DataFrame({
+    "duplicate_rows_found": [duplicate_rows_count],
+    "duplicate_rows_removed": [duplicates_removed_count],
+    "rows_before_removal": [len(original_data)],
+    "rows_after_removal": [len(data)]
+})
+
+duplicate_report.to_csv(
+    script_dir / "duplicate_report.csv",
+    index=False
+)
+
+
 
 # List of numberic columns to be cleaned
 numeric_columns = [
@@ -131,7 +159,6 @@ numeric_data.loc[
 ] = calculated_eccentricity[missing_eccentricity]
 
 
-numeric_data.to_csv(output_file, index=False) 
 
 # Roundness checks and calculations, validates area and perimeter for them
 # Roundness = (4 * pi * area) / (perimeter^2)
@@ -156,6 +183,16 @@ numeric_data.loc[
     missing_roundness,
     "roundness"
 ] = calculated_roundness[missing_roundness]
+
+
+
+# Extent checks and calculations, it is non calculable hence it will be calculated by class averages
+
+
+
+# Finished filling missing values exported to CSV
+
+numeric_data.to_csv(output_file, index=False) 
 
 # Second check for any missing values to validate that the cleaning process worked
 numeric_missing_clean = (
