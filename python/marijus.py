@@ -47,25 +47,51 @@ numeric_columns = [
 
 def parse_numeric(value):
     if pd.isna(value):
-        return np.nan
+        return np.nan, ""
 
-    value = str(value).strip()
+    original = str(value)
+    value = original.strip()
 
     if value == "":
-        return np.nan
-    
+        return np.nan, ""
+
     match = re.fullmatch(
         r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
         r"(?:\s+[A-Za-z%µ°]+)?",
         value
     )
 
-    if match:
-        return float(match.group(1))
+    if not match:
+        return np.nan, ""
 
-    return np.nan
+    number = float(match.group(1))
+
+    if value != match.group(1):
+        change = f"{original!r} -> {number}"
+    elif original != value:
+        change = f"{original!r} -> {value!r}"
+    else:
+        change = ""
+
+    return number, change
 
 
 numeric_data = data[numeric_columns].map(parse_numeric)
 
-print(numeric_data.head())
+numeric_data = pd.DataFrame(
+    np.nan,
+    index=data.index,
+    columns=numeric_columns
+)
+
+change_log = pd.DataFrame(
+    "",
+    index=data.index,
+    columns=numeric_columns
+)
+
+for column in numeric_columns:
+    parsed = data[column].map(parse_numeric)
+
+    numeric_data[column] = parsed.map(lambda x: x[0])
+    change_log[column] = parsed.map(lambda x: x[1])
