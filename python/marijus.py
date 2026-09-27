@@ -442,3 +442,161 @@ else:
 # Laikinas logas nebereikalingas.
 
 del logical_bound_log
+
+
+# išskirtys:
+#Patikrinamos išorinės išskirtys pagal Q1 - 3*IQR ir Q3 + 3*IQR.
+
+print("\n--- Outlier check (Q1 - 3*IQR / Q3 + 3*IQR) ---")
+
+outlier_thresholds = {}
+
+for column in numeric_columns:
+    q1 = numeric_data[column].quantile(0.25)
+    q3 = numeric_data[column].quantile(0.75)
+    iqr = q3 - q1
+
+    lower_threshold = q1 - 3 * iqr
+    upper_threshold = q3 + 3 * iqr
+
+    outlier_thresholds[column] = (
+        lower_threshold,
+        upper_threshold
+    )
+
+    lower_outliers = (
+        numeric_data[column].notna()
+        & (numeric_data[column] < lower_threshold)
+    ).sum()
+
+    upper_outliers = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > upper_threshold)
+    ).sum()
+
+    print(
+        f"{column}: "
+        f"Q1 = {q1}, "
+        f"Q3 = {q3}, "
+        f"IQR = {iqr}, "
+        f"lower threshold = {lower_threshold}, "
+        f"upper threshold = {upper_threshold}, "
+        f"lower outliers = {lower_outliers}, "
+        f"upper outliers = {upper_outliers}"
+    )
+
+
+#Patikrinama, kokiose klasėse yra viršutiniai outlieriai.
+
+print("\n--- Upper outliers by class ---")
+
+for column in numeric_columns:
+    lower_threshold, upper_threshold = outlier_thresholds[column]
+
+    mask = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > upper_threshold)
+    )
+
+    if mask.any():
+        print(f"\n{column}:")
+        print(
+            data.loc[mask, "class"]
+            .value_counts()
+            .to_string()
+        )
+
+
+#Patikrinama, kiek eilučių turi bent vieną viršutinį outlierį.
+
+upper_outlier_rows = pd.Series(
+    False,
+    index=numeric_data.index
+)
+
+for column in numeric_columns:
+    lower_threshold, upper_threshold = outlier_thresholds[column]
+
+    mask = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > upper_threshold)
+    )
+
+    upper_outlier_rows |= mask
+
+print(
+    f"Unique rows with at least one upper outlier: "
+    f"{upper_outlier_rows.sum()}"
+)
+
+
+#Patikrinama, kiek viršutinių outlierių turi kiekviena eilutė.
+
+upper_outlier_count = pd.Series(
+    0,
+    index=numeric_data.index
+)
+
+for column in numeric_columns:
+    lower_threshold, upper_threshold = outlier_thresholds[column]
+
+    mask = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > upper_threshold)
+    )
+
+    upper_outlier_count += mask.astype(int)
+
+print("\n--- Upper outliers per row ---")
+print(
+    upper_outlier_count[
+        upper_outlier_count > 0
+    ].value_counts().sort_index()
+)
+
+
+#Sukuriamas laikinas outlierių žurnalas.
+
+outlier_log = pd.Series(
+    "",
+    index=numeric_data.index,
+    dtype="object"
+)
+
+for column in numeric_columns:
+    lower_threshold, upper_threshold = outlier_thresholds[column]
+
+    mask = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > upper_threshold)
+    )
+
+    for index in numeric_data.index[mask]:
+        if outlier_log.at[index]:
+            outlier_log.at[index] += "; " + column
+        else:
+            outlier_log.at[index] = column
+
+print("\n--- Upper outlier flags ---")
+print(
+    f"Rows with upper outliers: "
+    f"{(outlier_log != '').sum()}"
+)
+
+#Viršutinės ribos išskirtys įrašomos į bendrą pakeitimų žurnalą.
+
+for index in numeric_data.index[outlier_log != ""]:
+    columns = outlier_log.at[index].split("; ")
+
+    for column in columns:
+        message = "upper outlier: Q3 + 3*IQR"
+
+        if change_log.at[index, column].strip():
+            change_log.at[index, column] += "; " + message
+        else:
+            change_log.at[index, column] = message
+
+
+#Laikinas išskirčių žurnalas nebereikalingas.
+
+del outlier_log
