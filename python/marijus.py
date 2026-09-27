@@ -113,6 +113,91 @@ for column in numeric_columns:
 #ShapeFactor3 - non calculable
 #ShapeFactor4 - non calculable
 
+#Patikrinamos loginės ribos prieš taisymą.
+
+print("\n--- Logical-bound check BEFORE corrections ---")
+
+# Visi skaitiniai dydžiai turi būti > 0
+
+for column in numeric_columns:
+    violations = (
+        numeric_data[column].notna()
+        & (numeric_data[column] <= 0)
+    ).sum()
+
+    if violations > 0:
+        print(f"{column}: {violations} violations")
+    else:
+        print(f"{column}: OK")
+
+# Tam tikri dydžiai turi būti <= 1
+
+bounded_columns = [
+    "Eccentricity",
+    "Extent",
+    "Solidity",
+    "roundness",
+    "Compactness"
+]
+
+print("\nBounded columns <= 1:")
+
+for column in bounded_columns:
+    violations = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > 1)
+    ).sum()
+
+    if violations > 0:
+        print(f"{column}: {violations} violations")
+    else:
+        print(f"{column}: OK")
+
+# AspectRation turi būti >= 1
+
+violations = (
+    numeric_data["AspectRation"].notna()
+    & (numeric_data["AspectRation"] < 1)
+).sum()
+
+if violations > 0:
+    print(f"\nAspectRation >= 1: {violations} violations")
+else:
+    print("\nAspectRation >= 1: OK")
+
+# ConvexArea turi būti >= Area
+
+violations = (
+    numeric_data["ConvexArea"].notna()
+    & numeric_data["Area"].notna()
+    & (numeric_data["ConvexArea"] < numeric_data["Area"])
+).sum()
+
+if violations > 0:
+    print(f"ConvexArea >= Area: {violations} violations")
+else:
+    print("ConvexArea >= Area: OK")
+
+# MajorAxisLength turi būti >= MinorAxisLength
+
+violations = (
+    numeric_data["MajorAxisLength"].notna()
+    & numeric_data["MinorAxisLength"].notna()
+    & (
+        numeric_data["MajorAxisLength"]
+        < numeric_data["MinorAxisLength"]
+    )
+).sum()
+
+if violations > 0:
+    print(
+        f"MajorAxisLength >= MinorAxisLength: "
+        f"{violations} violations"
+    )
+else:
+    print("MajorAxisLength >= MinorAxisLength: OK")
+
+
 #sukuriamas laikinas logas, kad neskaiciuotu iki siol padarytu changes.
 logical_bound_log = pd.DataFrame(
     "",
@@ -269,5 +354,91 @@ print(
     f"\nTotal logical-bound corrections: "
     f"{logical_changes.sum().sum()}"
 )
+
+
+#Patikrinamos loginės ribos po taisymo.
+
+print("\n--- Logical-bound check AFTER corrections ---")
+
+# Visi skaitiniai dydžiai turi būti > 0
+
+for column in numeric_columns:
+    violations = (
+        numeric_data[column].notna()
+        & (numeric_data[column] <= 0)
+    ).sum()
+
+    if violations > 0:
+        print(f"{column}: {violations} remaining violations")
+    else:
+        print(f"{column}: OK")
+
+# Tam tikri dydžiai turi būti <= 1
+
+print("\nBounded columns <= 1:")
+
+for column in bounded_columns:
+    violations = (
+        numeric_data[column].notna()
+        & (numeric_data[column] > 1)
+    ).sum()
+
+    if violations > 0:
+        print(f"{column}: {violations} remaining violations")
+    else:
+        print(f"{column}: OK")
+
+# AspectRation turi būti >= 1
+
+violations = (
+    numeric_data["AspectRation"].notna()
+    & (numeric_data["AspectRation"] < 1)
+).sum()
+
+if violations > 0:
+    print(
+        f"\nAspectRation >= 1: "
+        f"{violations} remaining violations"
+    )
+else:
+    print("\nAspectRation >= 1: OK")
+
+# ConvexArea turi būti >= Area
+
+violations = (
+    numeric_data["ConvexArea"].notna()
+    & numeric_data["Area"].notna()
+    & (numeric_data["ConvexArea"] < numeric_data["Area"])
+).sum()
+
+if violations > 0:
+    print(
+        f"ConvexArea >= Area: "
+        f"{violations} remaining violations"
+    )
+else:
+    print("ConvexArea >= Area: OK")
+
+# MajorAxisLength turi būti >= MinorAxisLength
+
+violations = (
+    numeric_data["MajorAxisLength"].notna()
+    & numeric_data["MinorAxisLength"].notna()
+    & (
+        numeric_data["MajorAxisLength"]
+        < numeric_data["MinorAxisLength"]
+    )
+).sum()
+
+if violations > 0:
+    print(
+        f"MajorAxisLength >= MinorAxisLength: "
+        f"{violations} remaining violations"
+    )
+else:
+    print("MajorAxisLength >= MinorAxisLength: OK")
+
+
+# Laikinas logas nebereikalingas.
 
 del logical_bound_log
