@@ -20,10 +20,7 @@ data = pd.read_csv(
     dtype=str
 )
 
-print(data.head())
-
 original_data = data.copy()
-
 
 #duomenu sutvarkymas (pavertimas i NaN arba sutvarkymas normaliai..)
 numeric_columns = [
@@ -96,7 +93,6 @@ for column in numeric_columns:
     numeric_data[column] = parsed.map(lambda x: x[0])
     change_log[column] = parsed.map(lambda x: x[1])
 
-print (numeric_data.head())
 
 #sutvarkytos eilutes, pereinam prie  tikros uzduoties
 #logiskai galimu ribu patikrinimas
@@ -105,7 +101,7 @@ print (numeric_data.head())
 # π / 4 * MajorAxisLength * MinorAxisLength neveikia
 #Perimeter - not calculable
 #AspectRation = MajorAxisLength/MinorAxisLength
-#Eccentricity = √(1-(Major-Minor)²)
+#Eccentricity = √(1-(MinorAxisLength/MajorAxisLength)²)
 #ConvexArea = Area / Solidity (jei gerai surasyti sitie)
 #EquivDiameter = √(4 × Area / π)
 #Extent - non calculable
@@ -116,3 +112,162 @@ print (numeric_data.head())
 #ShapeFactor2 - non calculable
 #ShapeFactor3 - non calculable
 #ShapeFactor4 - non calculable
+
+#sukuriamas laikinas logas, kad neskaiciuotu iki siol padarytu changes.
+logical_bound_log = pd.DataFrame(
+    "",
+    index=numeric_data.index,
+    columns=numeric_columns
+)
+
+print("\n--- Applying logical-bound corrections ---")
+
+# ConvexArea >= Area
+
+mask = (
+    numeric_data["ConvexArea"].notna()
+    & numeric_data["Area"].notna()
+    & (numeric_data["ConvexArea"] < numeric_data["Area"])
+    & numeric_data["Solidity"].notna()
+    & (numeric_data["Solidity"] > 0)
+)
+
+for index in numeric_data.index[mask]:
+    old_value = numeric_data.at[index, "ConvexArea"]
+
+    new_value = (
+        numeric_data.at[index, "Area"]
+        / numeric_data.at[index, "Solidity"]
+    )
+
+    numeric_data.at[index, "ConvexArea"] = new_value
+
+    message = (
+        f"logical-bound correction: {old_value} -> {new_value}; "
+        f"calculated as Area / Solidity"
+    )
+
+    logical_bound_log.at[index, "ConvexArea"] = message
+
+    if change_log.at[index, "ConvexArea"].strip():
+        change_log.at[index, "ConvexArea"] += "; " + message
+    else:
+        change_log.at[index, "ConvexArea"] = message
+
+# Solidity <= 1
+
+mask = (
+    numeric_data["Solidity"].notna()
+    & (numeric_data["Solidity"] > 1)
+    & numeric_data["Area"].notna()
+    & numeric_data["ConvexArea"].notna()
+    & (numeric_data["ConvexArea"] > 0)
+)
+
+for index in numeric_data.index[mask]:
+    old_value = numeric_data.at[index, "Solidity"]
+
+    new_value = (
+        numeric_data.at[index, "Area"]
+        / numeric_data.at[index, "ConvexArea"]
+    )
+
+    numeric_data.at[index, "Solidity"] = new_value
+
+    message = (
+        f"logical-bound correction: {old_value} -> {new_value}; "
+        f"calculated as Area / ConvexArea"
+    )
+
+    logical_bound_log.at[index, "Solidity"] = message
+
+    if change_log.at[index, "Solidity"].strip():
+        change_log.at[index, "Solidity"] += "; " + message
+    else:
+        change_log.at[index, "Solidity"] = message
+
+# Compactness <= 1
+
+mask = (
+    numeric_data["Compactness"].notna()
+    & (numeric_data["Compactness"] > 1)
+)
+
+for index in numeric_data.index[mask]:
+    class_name = data.at[index, "class"]
+
+    class_mean = numeric_data.loc[
+        data["class"] == class_name,
+        "Compactness"
+    ].mean()
+
+    if pd.notna(class_mean):
+        old_value = numeric_data.at[index, "Compactness"]
+        new_value = class_mean
+
+        numeric_data.at[index, "Compactness"] = new_value
+
+        message = (
+            f"logical-bound correction: {old_value} -> {new_value}; "
+            f"replaced with {class_name} class mean"
+        )
+
+        logical_bound_log.at[index, "Compactness"] = message
+
+        if change_log.at[index, "Compactness"].strip():
+            change_log.at[index, "Compactness"] += "; " + message
+        else:
+            change_log.at[index, "Compactness"] = message
+
+# AspectRation >= 1
+
+mask = (
+    numeric_data["AspectRation"].notna()
+    & (numeric_data["AspectRation"] < 1)
+    & numeric_data["MajorAxisLength"].notna()
+    & numeric_data["MinorAxisLength"].notna()
+    & (numeric_data["MinorAxisLength"] > 0)
+)
+
+for index in numeric_data.index[mask]:
+    old_value = numeric_data.at[index, "AspectRation"]
+
+    new_value = (
+        numeric_data.at[index, "MajorAxisLength"]
+        / numeric_data.at[index, "MinorAxisLength"]
+    )
+
+    numeric_data.at[index, "AspectRation"] = new_value
+
+    message = (
+        f"logical-bound correction: {old_value} -> {new_value}; "
+        f"calculated as MajorAxisLength / MinorAxisLength"
+    )
+
+    logical_bound_log.at[index, "AspectRation"] = message
+
+    if change_log.at[index, "AspectRation"].strip():
+        change_log.at[index, "AspectRation"] += "; " + message
+    else:
+        change_log.at[index, "AspectRation"] = message
+
+#Pranešame apie pakeitimus dėl loginių ribų.
+
+logical_changes = (
+    logical_bound_log[numeric_columns]
+    .apply(lambda column: column.str.strip().ne(""))
+)
+
+print("\n--- Logical-bound corrections by column ---")
+print(
+    logical_changes.sum()[
+        logical_changes.sum() > 0
+    ]
+)
+
+print(
+    f"\nTotal logical-bound corrections: "
+    f"{logical_changes.sum().sum()}"
+)
+
+del logical_bound_log
