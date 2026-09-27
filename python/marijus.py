@@ -600,3 +600,63 @@ for index in numeric_data.index[outlier_log != ""]:
 #Laikinas išskirčių žurnalas nebereikalingas.
 
 del outlier_log
+
+#Sukuriama galutinė išvalyta duomenų lentelė.
+
+cleaned_data = data.copy()
+
+for column in numeric_columns:
+    cleaned_data[column] = numeric_data[column]
+
+#Sujungiami visi pakeitimai į vieną change_log stulpelį.
+
+cleaned_data["change_log"] = change_log.apply(
+    lambda row: "; ".join(
+        f"{column}: {row[column]}"
+        for column in numeric_columns
+        if row[column].strip()
+    ),
+    axis=1
+)
+
+#Tušti change_log įrašai paliekami tušti.
+
+cleaned_data["change_log"] = cleaned_data["change_log"].replace("", np.nan)
+
+print("\n--- Final dataset ---")
+print(cleaned_data.head())
+
+print(
+    f"\nRows: {len(cleaned_data)}"
+)
+
+print(
+    f"Columns: {len(cleaned_data.columns)}"
+)
+
+#Išsaugomas galutinis išvalytas CSV failas.
+
+output_file = "A21_cleaned.csv"
+
+cleaned_data.to_csv(
+    output_file,
+    index=False
+)
+
+print(f"\nCleaned data saved to: {output_file}")
+
+
+#Sukuriamas atskiras change log tekstinis failas.
+
+change_log_file = "A21_change_log.txt"
+
+with open(change_log_file, "w", encoding="utf-8") as file:
+    for index in cleaned_data.index:
+        log_entry = cleaned_data.at[index, "change_log"]
+
+        if pd.notna(log_entry):
+            file.write(
+                f"Row {index}: {log_entry}\n"
+            )
+
+print(f"Change log saved to: {change_log_file}")
