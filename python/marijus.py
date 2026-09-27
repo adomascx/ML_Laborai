@@ -95,3 +95,24 @@ for column in numeric_columns:
 
     numeric_data[column] = parsed.map(lambda x: x[0])
     change_log[column] = parsed.map(lambda x: x[1])
+
+print (numeric_data.head())
+
+#sutvarkytos eilutes, pereinam prie  tikros uzduoties
+#logiskai galimu ribu patikrinimas
+
+#area: Area = π / 4 * EquivDiameter²
+# π / 4 * MajorAxisLength * MinorAxisLength neveikia
+#Perimeter - not calculable
+#AspectRation = MajorAxisLength/MinorAxisLength
+#Eccentricity = √(1-(Major-Minor)²)
+#ConvexArea = Area / Solidity (jei gerai surasyti sitie)
+#EquivDiameter = √(4 × Area / π)
+#Extent - non calculable
+#Solidity = Area / ConvexArea
+#Roundness = 4 × π × Area / Perimeter²
+#Compactness - non calculable
+#ShapeFactor1 = MajorAxisLength / Area
+#ShapeFactor2 - non calculable
+#ShapeFactor3 - non calculable
+#ShapeFactor4 - non calculable
