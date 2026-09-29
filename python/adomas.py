@@ -1,15 +1,19 @@
-import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 # --- Settings: adjust to your files and column names ---
-RAW_FILE   = "A21.csv"         # original, untouched data
-CLEAN_FILE = "A21_clean_TEST.csv"  # TEMP: from ONE_USE_fill_missing_for_testing.py; real file: "../results/A21_without_outliers.csv"  # output of your processing code (cleaned, NOT scaled)
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+RESULTS_DIR = SCRIPT_DIR / "results"
+
+
+RAW_FILE   = PROJECT_ROOT / "A21.csv"
+CLEAN_FILE = RESULTS_DIR / "A21_cleaned.csv"
 KEY = ["Area", "Perimeter", "AspectRation", "roundness", "Solidity", "ShapeFactor4"]
-OUT = "figs"
-os.makedirs(OUT, exist_ok=True)
+OUT = SCRIPT_DIR / "results" / "figs"
 
 raw = pd.read_csv(RAW_FILE)
 df = pd.read_csv(CLEAN_FILE)

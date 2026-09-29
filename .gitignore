@@ -10,4 +10,9 @@ venv/
 uv-cache/
 
 # Generated outputs
-python/figs/
+python/results/figs/
+
+# misc Markdown files
+*.md
+!TODO.md
+!README.md

@@ -6,9 +6,11 @@ import re
 pd.set_option("display.precision", 17) #kad neapvalintu po kablelio
 
 script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
+results_dir = script_dir / "results"
 
-input_file = script_dir / "A21.csv"
-output_file = script_dir / "A21_cleaned.csv"
+input_file = project_root / "A21.csv"
+output_file = results_dir / "A21_cleaned.csv"
 
 if not input_file.exists():
     raise FileNotFoundError(f"Input file '{input_file}' not found.")
@@ -636,8 +638,6 @@ print(
 
 #Išsaugomas galutinis išvalytas CSV failas.
 
-output_file = "A21_cleaned.csv"
-
 cleaned_data.to_csv(
     output_file,
     index=False
@@ -648,7 +648,7 @@ print(f"\nCleaned data saved to: {output_file}")
 
 #Sukuriamas atskiras change log tekstinis failas.
 
-change_log_file = "A21_change_log.txt"
+change_log_file = results_dir / "A21_change_log.txt"
 
 with open(change_log_file, "w", encoding="utf-8") as file:
     for index in cleaned_data.index:

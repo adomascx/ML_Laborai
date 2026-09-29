@@ -10,10 +10,12 @@ import re
 pd.set_option("display.precision", 17)
 
 script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
+results_dir = script_dir / "results"
 
-input_file = script_dir / "A21.csv"
-output_file = script_dir / "A21_cleaned.csv"
-original_data_file = script_dir / "A21_original_copy.csv"
+input_file = project_root / "A21.csv"
+output_file = results_dir / "A21_cleaned.csv"
+original_data_file = results_dir / "A21_original_copy.csv"
 
 if not input_file.exists():
     raise FileNotFoundError(f"Input file '{input_file}' not found.")
@@ -36,7 +38,7 @@ duplicates_removed_count = data.duplicated(keep="first").sum()      # Calculates
 
 duplicate_rows = data[duplicate_mask]
 duplicate_rows.to_csv(
-    script_dir / "duplicate_rows.csv",
+    results_dir / "duplicate_rows.csv",
     index=False
 )
 
@@ -51,7 +53,7 @@ duplicate_report = pd.DataFrame({
 })
 
 duplicate_report.to_csv(
-    script_dir / "duplicate_report.csv",
+    results_dir / "duplicate_report.csv",
     index=False
 )
 
@@ -127,7 +129,7 @@ numeric_missing_raw = (
     .reset_index(name="missing_count")
 )
 numeric_missing_raw.to_csv(
-    script_dir / "numeric_missing_values_raw.csv",
+    results_dir / "numeric_missing_values_raw.csv",
     index=False
 )
 
@@ -192,7 +194,8 @@ numeric_data.loc[
 
 # Finished filling missing values exported to CSV
 
-numeric_data.to_csv(output_file, index=False) 
+data[numeric_columns] = numeric_data
+data.to_csv(output_file, index=False)
 
 # Second check for any missing values to validate that the cleaning process worked
 numeric_missing_clean = (
@@ -203,6 +206,6 @@ numeric_missing_clean = (
 )
 
 numeric_missing_clean.to_csv(
-    script_dir / "numeric_missing_values_clean.csv",
+    results_dir / "numeric_missing_values_clean.csv",
     index=False
 )
