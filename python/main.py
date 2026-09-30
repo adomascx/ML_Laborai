@@ -189,6 +189,14 @@ numeric_data.loc[
 
 
 # Extent checks and calculations, it is non calculable hence it will be calculated by class averages
+extent_class_averages = numeric_data["Extent"].groupby(data["class"]).transform("mean")
+numeric_data["Extent"] = numeric_data["Extent"].fillna(extent_class_averages)
+
+
+
+# ShapeFactor4 checks and calculations, since it is non calculable it will be calculated by class averages
+shapefactor4_class_averages = numeric_data["ShapeFactor4"].groupby(data["class"]).transform("mean")
+numeric_data["ShapeFactor4"] = numeric_data["ShapeFactor4"].fillna(shapefactor4_class_averages)
 
 
 
