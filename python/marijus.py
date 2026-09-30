@@ -556,8 +556,103 @@ print(
     ].value_counts().sort_index()
 )
 
+#Papildoma išskirčių analizė pagal kiekvieną klasę.
 
-#Sukuriamas laikinas outlierių žurnalas.
+print("\n--- Class-specific outlier check ---")
+
+class_outlier_thresholds = {}
+
+for class_name in data["class"].dropna().unique():
+    class_mask = data["class"] == class_name
+
+    class_outlier_thresholds[class_name] = {}
+
+    print(f"\nClass: {class_name}")
+
+    for column in numeric_columns:
+        values = numeric_data.loc[class_mask, column].dropna()
+
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+
+        lower_threshold = q1 - 3 * iqr
+        upper_threshold = q3 + 3 * iqr
+
+        class_outlier_thresholds[class_name][column] = (
+            lower_threshold,
+            upper_threshold
+        )
+
+        lower_outliers = (
+            values < lower_threshold
+        ).sum()
+
+        upper_outliers = (
+            values > upper_threshold
+        ).sum()
+
+        print(
+            f"{column}: "
+            f"Q1 = {q1}, "
+            f"Q3 = {q3}, "
+            f"IQR = {iqr}, "
+            f"lower threshold = {lower_threshold}, "
+            f"upper threshold = {upper_threshold}, "
+            f"lower outliers = {lower_outliers}, "
+            f"upper outliers = {upper_outliers}"
+        )
+
+#Sukuriama klasėmis pagrįstos išskirčių analizės suvestinė.
+
+class_outlier_summary = []
+
+for class_name in class_outlier_thresholds:
+    class_mask = data["class"] == class_name
+
+    for column in numeric_columns:
+        lower_threshold, upper_threshold = (
+            class_outlier_thresholds[class_name][column]
+        )
+
+        values = numeric_data.loc[class_mask, column]
+
+        lower_outliers = (
+            values.notna()
+            & (values < lower_threshold)
+        ).sum()
+
+        upper_outliers = (
+            values.notna()
+            & (values > upper_threshold)
+        ).sum()
+
+        class_outlier_summary.append({
+            "class": class_name,
+            "column": column,
+            "lower_outliers": lower_outliers,
+            "upper_outliers": upper_outliers
+        })
+
+class_outlier_summary = pd.DataFrame(
+    class_outlier_summary
+)
+
+print("\n--- Class-specific outlier summary ---")
+print(class_outlier_summary.to_string(index=False))
+
+#Suskaičiuojamas bendras išskirčių skaičius kiekvienoje klasėje.
+
+class_outlier_totals = (
+    class_outlier_summary
+    .groupby("class")[["lower_outliers", "upper_outliers"]]
+    .sum()
+)
+
+print("\n--- Total outliers by class ---")
+print(class_outlier_totals)
+
+#Sukuriamas laikinas klasės pagrindu nustatytų viršutinių išskirčių žurnalas.
 
 outlier_log = pd.Series(
     "",
@@ -565,38 +660,46 @@ outlier_log = pd.Series(
     dtype="object"
 )
 
-for column in numeric_columns:
-    lower_threshold, upper_threshold = outlier_thresholds[column]
+for class_name in class_outlier_thresholds:
+    class_mask = data["class"] == class_name
 
-    mask = (
-        numeric_data[column].notna()
-        & (numeric_data[column] > upper_threshold)
-    )
+    for column in numeric_columns:
+        lower_threshold, upper_threshold = (
+            class_outlier_thresholds[class_name][column]
+        )
 
-    for index in numeric_data.index[mask]:
-        if outlier_log.at[index]:
-            outlier_log.at[index] += "; " + column
-        else:
-            outlier_log.at[index] = column
+        mask = (
+            class_mask
+            & numeric_data[column].notna()
+            & (numeric_data[column] > upper_threshold)
+        )
 
-print("\n--- Upper outlier flags ---")
-print(
-    f"Rows with upper outliers: "
-    f"{(outlier_log != '').sum()}"
-)
+        for index in numeric_data.index[mask]:
+            if outlier_log.at[index]:
+                outlier_log.at[index] += "; " + column
+            else:
+                outlier_log.at[index] = column
 
-#Viršutinės ribos išskirtys įrašomos į bendrą pakeitimų žurnalą.
+
+#Klasės pagrindu nustatytos viršutinės išskirtys įrašomos į bendrą pakeitimų žurnalą.
 
 for index in numeric_data.index[outlier_log != ""]:
     columns = outlier_log.at[index].split("; ")
 
     for column in columns:
-        message = "upper outlier: Q3 + 3*IQR"
+        message = "class-specific upper outlier: Q3 + 3*IQR"
 
         if change_log.at[index, column].strip():
             change_log.at[index, column] += "; " + message
         else:
             change_log.at[index, column] = message
+
+
+print("\n--- Class-specific upper outlier flags ---")
+print(
+    f"Rows with class-specific upper outliers: "
+    f"{(outlier_log != '').sum()}"
+)
 
 
 #Laikinas išskirčių žurnalas nebereikalingas.
