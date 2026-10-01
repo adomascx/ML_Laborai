@@ -21,6 +21,7 @@ Duomenų tyrybos ir mašininio mokymosi 1-as laboratorinis darbas, naudojant "UC
     - [Loginių ribų patikrinimas](#loginių-ribų-patikrinimas)
     - [Išskirčių analizė ir pašalinimas](#išskirčių-analizė-ir-pašalinimas)
     - [Požymių tarpusavio ryšių analizė](#požymių-tarpusavio-ryšių-analizė)
+  - [Žinomos valymo kodo klaidos](#žinomos-valymo-kodo-klaidos)
 
 ## Pradiniai duomenys - DRY BEAN A20–A23 STUDENTAMS
 
@@ -89,3 +90,14 @@ Statistiniai išskirtiniai stebėjimai nustatyti naudojant Tukey 1,5 × IQR tais
 ### Požymių tarpusavio ryšių analizė
 
 Požymių tarpusavio ryšiai įvertinti naudojant Pirsono koreliacijos koeficientą. Nustatyti stiprūs teigiami ryšiai tarp dydį apibūdinančių požymių, pavyzdžiui, tarp `Perimeter` ir `EquivDiameter` (`r = 0,990`), bei stiprūs neigiami ryšiai tarp kai kurių formos požymių, pavyzdžiui, tarp `AspectRation` ir `ShapeFactor3` (`r = -0,992`). Tai rodo, kad dalis požymių teikia panašią arba priešingai susijusią informaciją, todėl vėlesniame modeliavimo etape gali būti svarstoma požymių atranka arba dimensijos mažinimas.
+
+## Žinomos valymo kodo klaidos
+
+Patikrinta 2026-10-01, lyginant `python/results/A21_cleaned.csv` reikšmes su požymių formulėmis.
+
+1. **Iškraipytas `Area`, o ne `ConvexArea`.** 52 objektuose (CALI 28, BARBUNYA 14, BOMBAY 10) `Area` reikšmė padidinta 1,1–4,4 karto (mediana ×3). Ji nesutampa su `EquivDiameter` (A = π/4 · EquivDiameter²) ir `roundness`. `marijus.py` šiuos atvejus aptinka kaip `ConvexArea < Area` ir perrašo teisingą `ConvexArea` reikšme `Area / Solidity`. Iškraipytas `Area` lieka išvalytoje aibėje (matyti `04_boxplots_by_class.png`: BARBUNYA/CALI taškai ≈ 220–235 tūkst.). Teisingai reikėtų atkurti `Area = π/4 · EquivDiameter²` ir palikti `ConvexArea`. Neigiami `ConvexArea` (12) taisomi teisingai.
+2. **Iškraipytas `MajorAxisLength`.** 52 objektuose (CALI 26, BARBUNYA 18, BOMBAY 8) L padidintas ~2,4 karto. Jis nesutampa su `AspectRation · MinorAxisLength` ir `Eccentricity`. Kodas jų netaiso (matyti `06_scatter_axes.png`: grupė ties L ≈ 920–980 px). Atkurti: `MajorAxisLength = AspectRation · MinorAxisLength`.
+3. **Klasių lygmens išskirtys – daugiausia šios klaidos.** 94 iš 105 pažymėtų objektų yra 1 ir 2 punktų iškraipymai.
+4. **Apskaičiuojami požymiai užpildomi klasės vidurkiu.** `Compactness` > 1 (11 reikšmių) galima apskaičiuoti tiksliai kaip `EquivDiameter / MajorAxisLength`, o trūkstamą `ShapeFactor4` – kaip `Area / (π · L/2 · l/2)`. Kodo komentaras „non calculable“ šiems požymiams neteisingas (taip pat `ShapeFactor2 = Area / L³` ir `ShapeFactor3 = Compactness²`). Tikrai neapskaičiuojamas tik `Extent`.
+5. **`Eccentricity` ir `roundness` užpildomi iš galimai iškraipytų `MajorAxisLength` / `Area`.** Jei taisomi 1–2 punktai, užpildymą reikia atlikti po jų.
+6. **Pakeitimų žurnalo eilučių numeriai** (`A21_change_log.txt`) skaičiuojami po dublikatų pašalinimo (0-based), todėl nesutampa su `A21.csv` eilutėmis.
