@@ -14,7 +14,7 @@ project_root = script_dir.parent
 results_dir = script_dir / "results"
 
 input_file = project_root / "A21.csv"
-output_file = results_dir / "A21_cleaned.csv"
+output_file = results_dir / "A21_deduped.csv"
 original_data_file = results_dir / "A21_original_copy.csv"
 
 if not input_file.exists():

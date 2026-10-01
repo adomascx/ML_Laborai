@@ -9,7 +9,7 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 results_dir = script_dir / "results"
 
-input_file = project_root / "A21.csv"
+input_file = results_dir / "A21_deduped.csv"
 output_file = results_dir / "A21_cleaned.csv"
 
 if not input_file.exists():
