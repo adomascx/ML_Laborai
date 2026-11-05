@@ -458,8 +458,8 @@ for column in numeric_columns:
     q3 = numeric_data[column].quantile(0.75)
     iqr = q3 - q1
 
-    lower_threshold = q1 - 3 * iqr
-    upper_threshold = q3 + 3 * iqr
+    lower_threshold = q1 - 7.5 * iqr
+    upper_threshold = q3 + 7.5 * iqr
 
     outlier_thresholds[column] = (
         lower_threshold,
