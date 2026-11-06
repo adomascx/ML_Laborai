@@ -2,6 +2,7 @@ import umap
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
+from sklearn.manifold import trustworthiness #algoritmų išvesčių įvertinimui
 
 #tiriami parametrai
 SEKLOS = [627774, 123456, 654321, 8888, 149] #random_state parametras
@@ -9,29 +10,55 @@ KAIMYNAI = [5,15,30,50,100] #n_neighbors default 15
 MIN_ATSTUMAI = [0.0, 0.1, 0.5] #min_dist default 0.1
 DIMENSIJOS = [2,3,5,10] #n_components
 
-def eksperimentasA1(rinkinys,pavadinimai):
-    modelis = umap.UMAP(n_components=2,random_state=42) # 2 dimensijos ir sėkla = 42, naudojami numatytieji n_neighbors = 15 ir min_dist = 0.1
-    Y = modelis.fit_transform(rinkinys) #perdaromas grafas iš pvz 3474x16 į 3474x2. Fit - "mokykis iš duomenų", "transform" - užpildyk grafą/lentelę. Grąžinamos (x,y) koordinačių sekos.
-    print(Y.shape) #patikriname, ar gaunasi 3474x2 (grąžina dydį: eilutės, stilpeliai)
-    # išlieka eiliškumas, t.y. X[0]=Y[0]=pavadinimai[0].
+#bendri kintamieji
+SPALVOS = {"BARBUNYA": "#1f77b4", "BOMBAY": "#d62728","CALI": "#2ca02c"} # tokios pačios, kaip pirmame laboratoriniame
 
+def paveiksliukogeneravimas(rinkinys,pavadinimai, titulas):
     #paruošiame ir piešiame grafikus
-    SPALVOS = {"BARBUNYA": "#1f77b4", "BOMBAY": "#d62728","CALI": "#2ca02c"} # tokios pačios, kaip pirmame laboratoriniame
-    os.makedirs("python/results/figs", exist_ok=True) #pasidarome vietą, kurioje generuojami paveikslėliai
+    os.makedirs("python/results/figs/UMAP", exist_ok=True) #pasidarome vietą, kurioje generuojami paveikslėliai
 
     plt.figure(figsize=(8, 6)) #matuojama coliais
     for klase, spalva in SPALVOS.items(): #kiekvienai kombinacijai / 3 ciklai
         eilutes = pavadinimai == klase #palygina visą masyvą su viena klase iš karto, kad pritaikytų spalvą
-        plt.scatter(Y[eilutes, 0], Y[eilutes, 1], s=5, c=spalva, label=klase) #nupiešiamas taškelis ir pritaikoma spalva
+        plt.scatter(rinkinys[eilutes, 0], rinkinys[eilutes, 1], s=5, c=spalva, label=klase) #nupiešiamas taškelis ir pritaikoma spalva
     plt.legend()
-    plt.title("UMAP, numatytieji parametrai")
-    plt.savefig("python/results/figs/umap_default.png", dpi=150)
+    plt.title(titulas)
+    plt.savefig("python/results/umap/figs/umap_default.png", dpi=150)
+
+def eksperimentasA1(rinkinys,pavadinimai):
+    rezultatai = []
+    
+    #apskaičiuojamos pirmos 75 kombinacijos, iš jų padaromi piešinukai, nustatoma, kokie parametrai patikimiausi ir tęstiniausi.
+    for seed in SEKLOS: #5
+        for kaimynai in KAIMYNAI: #5x5 =25
+            for min_atstumas in MIN_ATSTUMAI: # 25x3 = 75 kombinacijos
+                modelis = umap.UMAP(random_state=seed, n_neighbors=kaimynai, min_dist=min_atstumas, n_components=2)
+                Y = modelis.fit_transform(rinkinys) #perdaromas grafas iš pvz 3474x16 į 3474x2. Fit - "mokykis iš duomenų", "transform" - užpildyk grafą/lentelę. Grąžinamos (x,y) koordinačių sekos.
+                # išlieka eiliškumas, t.y. X[0]=Y[0]=pavadinimai[0].
+                
+                #įvertinimas
+                eilute = {"seed": seed, "n_neighbors": kaimynai, "min_dist": min_atstumas}
+                for k in [5,15,50]: #įvertiname tikrindami 5 kaimynus, tada 15 kaimynų ir t.t.
+                    #f"T{k}" yra paprastas string formatas, kad skaičius užsirašytų: "T5" arba "T15"
+                    eilute[f"T{k}"] = trustworthiness(rinkinys,Y,n_neighbors=k) #T - patikimumas (trustworthiness), matuojamas nuo 0-1, 1 - tobula 0 - blogiausia. Nurodo, ar galima pasitikėti grafiku, t.y. ar kaimynai 2d erdvėje atvaizduojami teisingu atstumu, palyginus su 16d erdve.
+                    eilute[f"C{k}"] = trustworthiness(Y, rinkinys, n_neighbors=k) #C - tęstinumas (continuity), matuojamas nuo 0-1, 1 - tobula. Nurodo ar tikri kaimynai iš tikro ir liko kaimynais, ar ne.
+                rezultatai.append(eilute)
+                print(seed, kaimynai, min_atstumas)
+
+                paveiksliukogeneravimas(Y,pavadinimai, f"UMAP Kaimynai: {kaimynai}, min_dist: {min_atstumas}, sekla: {seed}")
+
+    lentele = pd.DataFrame(rezultatai) #lentelėje gauname visą įvertinimo log'ą
+    lentele.to_csv("python/results/umap/umap_parametrai.csv", index=False)
+    return lentele
+        
 
 def eksperimentasA2(rinkinys,pavadinimai):
     print("hi")
 
 def eksperimentasBirC(rinkinys,pavadinimai):
     print("hi")
+
+
 
 def main():
     #nuskaitymas
@@ -42,12 +69,12 @@ def main():
 
     #EKSPERIMENTĄ ATLIKTI SU: originaliu duomenų rinkiniu, pašalintom išskirtim, pašalintais koreliuotais požymiais
     #Pašalinus duomenis normuoti iš naujo!
-    #EKSPERIMENTAS A.1 su originaliu duomenų rinkiniu (atliekamas normavimas kiekvienam rinkiniui)
+    #EKSPERIMENTAS A1 su originaliu duomenų rinkiniu (atliekamas normavimas kiekvienam rinkiniui)
     #Eksperimento tikslas - atrinkti parametrus: n_neighbors, min_dist ir išbandyti kelias sėklas
     #Mano eksperimento metu tikrinami 5 n_neighbors, 3 min_dist ir 5 sėklos - 75 kombinacijos su originaliu rinkiniu
     X = ((pozymiai - pozymiai.mean()) / pozymiai.std()).to_numpy() #formulė iš adomas.py + .to_numpy padaro, kad lentelė būtų paprastas skaičių masyvas
     eksperimentasA1(X,pavadinimai)
-    #EKSPERIMENTAS A.2 su originaliu duomenų rinkiniu
+    #EKSPERIMENTAS A2 su originaliu duomenų rinkiniu
     #Eksperimento tikslas - ištirti, prie kurios dimensijos geriausiai veikia pasirinkti parametrai
     #Tiriamas parametras - n_components, tiriamos 4 vertės: 2,3,5,10 ir 5 sėklos, praktiškai 20 kombinacijų
     eksperimentasA2(X,pavadinimai)
