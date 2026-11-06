@@ -49,7 +49,7 @@ def eksperimentasA1(rinkinys,pavadinimai):
     for seed in SEKLOS: #5
         for kaimynai in KAIMYNAI: #5x5 =25
             for min_atstumas in MIN_ATSTUMAI: # 25x3 = 75 kombinacijos
-                modelis = umap.UMAP(random_state=seed, n_neighbors=kaimynai, min_dist=min_atstumas, n_components=2)
+                modelis = umap.UMAP(random_state=seed, n_neighbors=kaimynai, min_dist=min_atstumas, n_components=2, n_jobs=1) #n_jobs - kad naudotų tik vieną procesoriaus branduolį (nemestų įspėjimų.)
                 Y = modelis.fit_transform(rinkinys) #perdaromas grafas iš pvz 3474x16 į 3474x2. Fit - "mokykis iš duomenų", "transform" - užpildyk grafą/lentelę. Grąžinamos (x,y) koordinačių sekos.
                 # išlieka eiliškumas, t.y. X[0]=Y[0]=pavadinimai[0].
                 

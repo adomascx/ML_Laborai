@@ -11,6 +11,7 @@ uv-cache/
 
 # Generated outputs
 python/results/figs/
+python/results/umap/
 
 # misc Markdown files
 *.md
