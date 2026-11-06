@@ -3,9 +3,13 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 
-def eksperimentas(rinkinys,pavadinimai):
-    #EKSPERIMENTĄ ATLIKTI SU: originaliu duomenų rinkiniu, pašalintom išskirtim, pašalintais koreliuotais požymiais
-    #Pašalinus duomenis normuoti iš naujo!
+#tiriami parametrai
+SEKLOS = [627774, 123456, 654321, 8888, 149] #random_state parametras
+KAIMYNAI = [5,15,30,50,100] #n_neighbors default 15
+MIN_ATSTUMAI = [0.0, 0.1, 0.5] #min_dist default 0.1
+DIMENSIJOS = [2,3,5,10] #n_components
+
+def eksperimentasA1(rinkinys,pavadinimai):
     modelis = umap.UMAP(n_components=2,random_state=42) # 2 dimensijos ir sėkla = 42, naudojami numatytieji n_neighbors = 15 ir min_dist = 0.1
     Y = modelis.fit_transform(rinkinys) #perdaromas grafas iš pvz 3474x16 į 3474x2. Fit - "mokykis iš duomenų", "transform" - užpildyk grafą/lentelę. Grąžinamos (x,y) koordinačių sekos.
     print(Y.shape) #patikriname, ar gaunasi 3474x2 (grąžina dydį: eilutės, stilpeliai)
@@ -23,6 +27,12 @@ def eksperimentas(rinkinys,pavadinimai):
     plt.title("UMAP, numatytieji parametrai")
     plt.savefig("python/results/figs/umap_default.png", dpi=150)
 
+def eksperimentasA2(rinkinys,pavadinimai):
+    print("hi")
+
+def eksperimentasBirC(rinkinys,pavadinimai):
+    print("hi")
+
 def main():
     #nuskaitymas
     df = pd.read_csv("python/results/A21_cleaned.csv")
@@ -30,11 +40,21 @@ def main():
     pavadinimai = df["class"].to_numpy() #nuskaitoma klasė, to_numpy paverčia į masyvą ["CALI","BOMBAY"...]. Praktiškai nuskaito kiekvienos eilutės klasę
     pozymiai = df.drop(columns=["class", "change_log"]) #atmetami neaktualūs stulpeliai
 
-    #EKSPERIMENTAS A su originaliu duomenų rinkiniu (atliekamas normavimas kiekvienam rinkiniui)
+    #EKSPERIMENTĄ ATLIKTI SU: originaliu duomenų rinkiniu, pašalintom išskirtim, pašalintais koreliuotais požymiais
+    #Pašalinus duomenis normuoti iš naujo!
+    #EKSPERIMENTAS A.1 su originaliu duomenų rinkiniu (atliekamas normavimas kiekvienam rinkiniui)
+    #Eksperimento tikslas - atrinkti parametrus: n_neighbors, min_dist ir išbandyti kelias sėklas
+    #Mano eksperimento metu tikrinami 5 n_neighbors, 3 min_dist ir 5 sėklos - 75 kombinacijos su originaliu rinkiniu
     X = ((pozymiai - pozymiai.mean()) / pozymiai.std()).to_numpy() #formulė iš adomas.py + .to_numpy padaro, kad lentelė būtų paprastas skaičių masyvas
-    eksperimentas(X,pavadinimai)
+    eksperimentasA1(X,pavadinimai)
+    #EKSPERIMENTAS A.2 su originaliu duomenų rinkiniu
+    #Eksperimento tikslas - ištirti, prie kurios dimensijos geriausiai veikia pasirinkti parametrai
+    #Tiriamas parametras - n_components, tiriamos 4 vertės: 2,3,5,10 ir 5 sėklos, praktiškai 20 kombinacijų
+    eksperimentasA2(X,pavadinimai)
 
     #EKSPERIMENTAS B su rinkiniu be išskirčių
+    #Eksperimento tikslas - ištirti pasirinktų parametrų jautrumą (kartu su eksperimentu C), įrodyti, kad parametrai teisingi
+    #Tiriami tie patys parametrai su 5 sėklom
     #pasalinamos isskirtys
     q1=pozymiai.quantile(0.25)
     q3=pozymiai.quantile(0.75)
@@ -47,7 +67,7 @@ def main():
     pavadinimai_b=pavadinimai[liko] 
 
     X = ((pozymiai_b - pozymiai_b.mean()) / pozymiai_b.std()).to_numpy()
-    eksperimentas(X,pavadinimai_b)
+    eksperimentasBirC(X,pavadinimai_b)
 
     #EKSPERIMENTAS C su rinkiniu be išskirčių ir be koreliuotų požymių
     #randu koreliuotus požymius
@@ -56,9 +76,9 @@ def main():
 
     KORELIUOTI = []
     for i, pirmas in enumerate(stulpeliai):
-        if pirmas in KORELIUOTI:
+        if pirmas in KORELIUOTI: #praleidžiame jau pašalintą požymį
             continue
-        for antras in stulpeliai[i + 1]: #antras visad = pirmas + 1
+        for antras in stulpeliai[i + 1:]: #antras visad = pirmas + 1 (: padaro, kad imtų visą stulpelį)
             if koreliacija.loc[pirmas,antras] > 0.9 and antras not in KORELIUOTI: #.loc pasirenka to pačio stulpelio tas pačias eilutes palyginimui
                 KORELIUOTI.append(antras)
 
@@ -67,8 +87,6 @@ def main():
     pozymiai_c = pozymiai.drop(columns=KORELIUOTI)
 
     X = ((pozymiai_c - pozymiai_c.mean()) / pozymiai_c.std()).to_numpy()
-    eksperimentas(X, pavadinimai) #pavadinimai tie patys, nes jų skaičius nesikeičia (šalinami stulpeliai, o ne eilutės)
-
-
+    eksperimentasBirC(X, pavadinimai) #pavadinimai tie patys, nes jų skaičius nesikeičia (šalinami stulpeliai, o ne eilutės)
 
 main()
