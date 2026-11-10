@@ -3,6 +3,10 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from sklearn.manifold import trustworthiness #algoritmų išvesčių įvertinimui
+from sklearn.neighbors import NearestNeighbors #artimiausių kaimynų paieškai
+from scipy.spatial.distance import pdist #atstumai tarp visų taškų porų
+from scipy.spatial import procrustes #dviejų projekcijų formos palyginimui
+from scipy.stats import spearmanr #Spearmano koreliacija
 
 #tiriami parametrai
 SEKLOS = [627774, 123456, 654321, 8888, 149] #random_state parametras
@@ -20,6 +24,47 @@ GERIAUSIA_DIMENSIJA = 5 #pagal eksperimentasA2(). Kuo daugiau dimensiju -> tuo g
 #tačiau 2 dimensija, su kuria galima piešti grafikus, buvo tik per 0.0099 nuo 5 dimensijos. Todėl naudosime ją, kad galėtume piešti vienodus grafikus su kitais algoritmais.
 #todel eksperimentai B ir C bus atlikti ir su 5 ir su 2
 TIRIAMOS_DIMENSIJOS = [2, GERIAUSIA_DIMENSIJA]
+
+
+#PAGALBINĖS FUNKCIJOS
+def projekcija(X, seed, dimensija, kaimynai=GERIAUSI_KAIMYNAI, min_atstumas=GERIAUSIAS_MIN_ATSTUMAS):
+    #vienas UMAP paleidimas. Jei kaimynai ir min_atstumas nenurodyti, naudojami geriausi parametrai
+    modelis = umap.UMAP(random_state=seed, n_neighbors=kaimynai, min_dist=min_atstumas,
+                        n_components=dimensija, n_jobs=1)
+    return modelis.fit_transform(X)
+
+def kaimynai_lentele(Y, k):
+    #kiekvieno taško k artimiausių kaimynų eilučių numeriai
+    #prašome k+1, nes artimiausias kiekvienam taškui yra jis pats, o [:, 1:] tą pirmą stulpelį išmeta
+    return NearestNeighbors(n_neighbors=k + 1).fit(Y).kneighbors(Y, return_distance=False)[:, 1:]
+
+def neighborhood_hit(Y, pavadinimai, k):
+    #kaimynystės poveikis (NH): kokia dalis kaimynų projekcijoje yra tos pačios klasės, vidurkis per visus taškus
+    #pavadinimai[...] kaimynų numerius pakeičia jų klasėmis, pavadinimai[:, None] - kiekvieno taško klasė stulpeliu
+    return (pavadinimai[kaimynai_lentele(Y, k)] == pavadinimai[:, None]).mean()
+
+def kaimynu_sutapimas(Y1, Y2, k):
+    #kokia dalis kaimynų sutampa dviejose projekcijose (1 - visi tie patys, 0 - nė vieno bendro)
+    n1, n2 = kaimynai_lentele(Y1, k), kaimynai_lentele(Y2, k)
+    #set(a) & set(b) - kaimynai, esantys abiejuose sąrašuose
+    return sum(len(set(a) & set(b)) for a, b in zip(n1, n2)) / (len(n1) * k)
+
+def atstumu_koreliacija(Y1, Y2):
+    #Spearmano koreliacija tarp visų porų atstumų: ar išliko atstumų tvarka
+    #(X, Y) - originali erdvė prieš projekciją, (Y_a, Y_b) - dvi projekcijos tarpusavyje
+    return spearmanr(pdist(Y1), pdist(Y2)).statistic
+
+def normuotas_stress(X, Y):
+    #normuotoji įtempimo funkcija pagal skaidrę: sum((dX - dY)^2) / sum(dX^2), 0 - tobula
+    #UMAP koordinatės neturi mastelio, todėl projekcija pirma padauginama iš a, kuris geriausiai atitinka originalius atstumus
+    dX, dY = pdist(X), pdist(Y)
+    a = (dX @ dY) / (dY @ dY)
+    return ((dX - a * dY) ** 2).sum() / (dX ** 2).sum()
+
+def procrustes_skirtumas(Y1, Y2):
+    #dviejų projekcijų formos skirtumas: viena pasukama, apverčiama ir keičiamas mastelis, kad atitiktų kitą
+    #lieka tik tikras formos skirtumas (0 - ta pati forma). [2] - trečia grąžinama reikšmė, skirtumas
+    return procrustes(Y1, Y2)[2]
 
 def paveiksliukogeneravimas(rinkinys, pavadinimai, titulas, failopavadinimas):
     #paruošiame ir piešiame grafikus
