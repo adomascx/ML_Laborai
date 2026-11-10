@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from sklearn.manifold import trustworthiness #algoritmų išvesčių įvertinimui
+from itertools import combinations #visos sėklų poros stabilumo palyginimui
 from sklearn.neighbors import NearestNeighbors #artimiausių kaimynų paieškai
 from scipy.spatial.distance import pdist #atstumai tarp visų taškų porų
 from scipy.spatial import procrustes #dviejų projekcijų formos palyginimui
@@ -24,6 +25,10 @@ GERIAUSIA_DIMENSIJA = 5 #pagal eksperimentasA2(). Kuo daugiau dimensiju -> tuo g
 #tačiau 2 dimensija, su kuria galima piešti grafikus, buvo tik per 0.0099 nuo 5 dimensijos. Todėl naudosime ją, kad galėtume piešti vienodus grafikus su kitais algoritmais.
 #todel eksperimentai B ir C bus atlikti ir su 5 ir su 2
 TIRIAMOS_DIMENSIJOS = [2, GERIAUSIA_DIMENSIJA]
+
+#eksperimentui A3: pavadinimas -> (n_neighbors, min_dist)
+NUSTATYMAI = {"numatytieji": (15, 0.1),
+              "geriausi": (GERIAUSI_KAIMYNAI, GERIAUSIAS_MIN_ATSTUMAS)}
 
 
 #PAGALBINĖS FUNKCIJOS
@@ -156,6 +161,55 @@ def eksperimentasA2(rinkinys,pavadinimai):
     print(suvestine[["TC15"]].round(4))
     print("\nAnalize baigta.\nEksperimentas A2 baigtas.\n")
 
+def eksperimentasA3(X, pavadinimai):
+    #Eksperimento tikslas: 1) palyginti numatytuosius ir geriausius parametrus visomis metrikomis (T, C, NH, Spearman, stress)
+    #2) įvertinti stabilumą - kiek panašios skirtingų sėklų projekcijos (Procrustes, kaimynų sutapimas). Tai ir A vs A atskaitos taškas B ir C eksperimentams
+    #2 nustatymai x 2 dimensijos x 5 sėklos = 20 paleidimų
+    print("\nPradedamas eksperimentas A3 - numatytieji vs geriausi parametrai ir stabilumas")
+    rezultatai = []
+    stabilumas = []
+
+    for nustatymas, (kaimynai, min_atstumas) in NUSTATYMAI.items(): #išpakuojamas pavadinimas ir abu skaičiai
+        for dimensija in TIRIAMOS_DIMENSIJOS:
+            projekcijos = {} #kiekvienos sėklos projekcija, kad vėliau galėtume jas palyginti tarpusavyje
+
+            for seed in SEKLOS:
+                Y = projekcija(X, seed, dimensija, kaimynai, min_atstumas)
+                projekcijos[seed] = Y
+
+                eilute = {"nustatymas": nustatymas, "n_components": dimensija, "seed": seed,
+                          "spearman": atstumu_koreliacija(X, Y), #ar išliko atstumų tvarka tarp 16d ir projekcijos
+                          "stress": normuotas_stress(X, Y)}
+                for k in [5, 15, 50]:
+                    eilute[f"T{k}"] = trustworthiness(X, Y, n_neighbors=k)
+                    eilute[f"C{k}"] = trustworthiness(Y, X, n_neighbors=k)
+                    eilute[f"NH{k}"] = neighborhood_hit(Y, pavadinimai, k)
+                rezultatai.append(eilute)
+                print(nustatymas, dimensija, seed)
+
+            #stabilumas: lyginamos visos sėklų poros (10 porų)
+            for s1, s2 in combinations(SEKLOS, 2):
+                eilute = {"nustatymas": nustatymas, "n_components": dimensija, "seed1": s1, "seed2": s2,
+                          "procrustes": procrustes_skirtumas(projekcijos[s1], projekcijos[s2])}
+                for k in [5, 15, 50]:
+                    eilute[f"sutapimas{k}"] = kaimynu_sutapimas(projekcijos[s1], projekcijos[s2], k)
+                stabilumas.append(eilute)
+
+    metrikos = pd.DataFrame(rezultatai)
+    metrikos.to_csv("python/results/umap/umap_A3_metrikos.csv", index=False)
+    stab = pd.DataFrame(stabilumas)
+    stab.to_csv("python/results/umap/umap_A3_stabilumas.csv", index=False)
+
+    print("Generavimas baigtas.\nPradedama analize.\n")
+    grupes = ["nustatymas", "n_components"]
+    suvestine = metrikos.drop(columns="seed").groupby(grupes).agg(["mean", "std"])
+    suvestine.round(4).to_csv("python/results/umap/umap_A3_metrikos_suvestine.csv")
+    stab_suvestine = stab.drop(columns=["seed1", "seed2"]).groupby(grupes).agg(["mean", "std"])
+    stab_suvestine.round(4).to_csv("python/results/umap/umap_A3_stabilumas_suvestine.csv")
+    print(suvestine.round(4))
+    print(stab_suvestine.round(4))
+    print("\nAnalize baigta.\nEksperimentas A3 baigtas.\n")
+
 def eksperimentasBirC(rinkinys,pavadinimai):
     print("hi")
 
@@ -181,6 +235,10 @@ def main():
     #Eksperimento tikslas - ištirti, prie kurios dimensijos geriausiai veikia pasirinkti parametrai
     #Tiriamas parametras - n_components, tiriamos 4 vertės: 2,3,5,10 ir 5 sėklos, praktiškai 20 kombinacijų
     #eksperimentasA2(X,pavadinimai)  #jau atlikta, rezultatai: python/results/umap/umap_dimensijos.csv
+
+    #EKSPERIMENTAS A3 su originaliu duomenų rinkiniu
+    #Eksperimento tikslas - palyginti numatytuosius ir geriausius parametrus visomis metrikomis ir įvertinti stabilumą tarp sėklų
+    eksperimentasA3(X, pavadinimai)
 
     #EKSPERIMENTAS C su rinkiniu be išskirčių
     #Eksperimento tikslas - ištirti pasirinktų parametrų jautrumą (kartu su eksperimentu B), įrodyti, kad parametrai teisingi
