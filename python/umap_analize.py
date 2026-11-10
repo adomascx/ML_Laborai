@@ -16,8 +16,10 @@ SPALVOS = {"BARBUNYA": "#1f77b4", "BOMBAY": "#d62728","CALI": "#2ca02c"} # tokio
 #geriausias parametrų derinys
 GERIAUSI_KAIMYNAI = 15 #pagal eksperimentasA1()
 GERIAUSIAS_MIN_ATSTUMAS = 0.0 #pagal eksperimentasA1()
-GERIAUSIA_DIMENSIJA = 0 #pagal eksperimentasA2()
-
+GERIAUSIA_DIMENSIJA = 5 #pagal eksperimentasA2(). Kuo daugiau dimensiju -> tuo geresni rezultatai, tiesa, 10 buvo geresnis už 5, tačiau tik per 0.0001 TC15, kas pasirinkus reikštų, kad pridedama per daug kompleksiškumo.
+#tačiau 2 dimensija, su kuria galima piešti grafikus, buvo tik per 0.0099 nuo 5 dimensijos. Todėl naudosime ją, kad galėtume piešti vienodus grafikus su kitais algoritmais.
+#todel eksperimentai B ir C bus atlikti ir su 5 ir su 2
+TIRIAMOS_DIMENSIJOS = [2, GERIAUSIA_DIMENSIJA]
 
 def paveiksliukogeneravimas(rinkinys, pavadinimai, titulas, failopavadinimas):
     #paruošiame ir piešiame grafikus
@@ -29,28 +31,7 @@ def paveiksliukogeneravimas(rinkinys, pavadinimai, titulas, failopavadinimas):
     plt.title(titulas)
     plt.savefig(f"python/results/umap/figs/{failopavadinimas}.png", dpi=150)
     plt.close()
-
-def analizuotiA1(lentele):
-    print("Atliekama 1-ojo eksperimento analizė (išvedami apdoroti rezultatai)\n")
-    lentele = pd.read_csv("python/results/umap/umap_parametrai.csv")
-    #sugrupuoju visus rezultatus pagal sėklą ir išvedu vidurkius, taip randu geriausią kombinaciją.
-
-    lentele["TC15"] = (lentele["T15"] + lentele["C15"]) / 2
-    for k in [5, 15, 50]:
-        lentele[f"skirtumas{k}"] = (lentele[f"T{k}"] - lentele[f"C{k}"]).abs()
-
-    suvestine = lentele.drop(columns="seed").groupby(["n_neighbors", "min_dist"]).agg(["mean", "std"])
-    suvestine = suvestine.sort_values(("TC15", "mean"), ascending=False)
-
-    suvestine.round(4).to_csv("python/results/umap/umap_suvestine.csv")
-    print(suvestine[["TC15"]].round(4))
-    #gaunama, kad tiksliausi rezultatai prie min_dist 0.0, kas turbūt reiškia, kad pupelės nesiskyrė tiek daug kiek atrodė.
-    #tačiau pastebime, kad min_dist pakelia C, bet nuleidžia T. Tuo tarpu n_neighbors keliant taip pat nuleidžia T, o pakelia C.
-    #sėklos labai mažai daro įtakos: standartinis nuokrypis vidutiniškai mažesnis už 0,002 visose kombinacijose.
-    #min_dist daro daugiau įtakos nei n_neighbors
     
-    #rastas geriausias derinys: n_neighbors=15 ir min_dist=0.0, prie kurio (T15+C15)/2 = 0.9774 su 0.0005 sd (paklaida)
-    #todėl šis derinys nustatytas projekto viršuje kaip konstantos
 
 def eksperimentasA1(rinkinys,pavadinimai):
     rezultatai = []
@@ -78,7 +59,26 @@ def eksperimentasA1(rinkinys,pavadinimai):
     lentele = pd.DataFrame(rezultatai) #lentelėje gauname visą įvertinimo log'ą
     lentele.to_csv("python/results/umap/umap_parametrai.csv", index=False)
     print("generavimas baigtas \n")
-    analizuotiA1(lentele)
+    print("Atliekama 1-ojo eksperimento analizė (išvedami apdoroti rezultatai)\n")
+    lentele["TC15"] = (lentele["T15"] + lentele["C15"]) / 2
+    for k in [5, 15, 50]:
+        lentele[f"skirtumas{k}"] = (lentele[f"T{k}"] - lentele[f"C{k}"]).abs()
+
+    #sugrupuoju visus rezultatus pagal sėklą ir išvedu vidurkius, taip randu geriausią kombinaciją.
+    suvestine = lentele.drop(columns="seed").groupby(["n_neighbors", "min_dist"]).agg(["mean", "std"])
+    suvestine = suvestine.sort_values(("TC15", "mean"), ascending=False)
+
+    suvestine.round(4).to_csv("python/results/umap/umap_suvestine.csv")
+    print(suvestine[["TC15"]].round(4))
+    
+    #gaunama, kad tiksliausi rezultatai prie min_dist 0.0, kas turbūt reiškia, kad pupelės nesiskyrė tiek daug kiek atrodė.
+    #tačiau pastebime, kad min_dist pakelia C, bet nuleidžia T. Tuo tarpu n_neighbors keliant taip pat nuleidžia T, o pakelia C.
+    #sėklos labai mažai daro įtakos: standartinis nuokrypis vidutiniškai mažesnis už 0,002 visose kombinacijose.
+    #min_dist daro daugiau įtakos nei n_neighbors
+    
+    #rastas geriausias derinys: n_neighbors=15 ir min_dist=0.0, prie kurio (T15+C15)/2 = 0.9774 su 0.0005 sd (paklaida)
+    #todėl šis derinys nustatytas projekto viršuje kaip konstantos
+    print("Analize baigta.\n")
 
 def eksperimentasA2(rinkinys,pavadinimai):
     print("\nPradedamas eksperimentas A2 - nustatoma geriausia dimensija")
@@ -104,12 +104,12 @@ def eksperimentasA2(rinkinys,pavadinimai):
 
     lentele["TC15"] = (lentele["T15"]+lentele["C15"])/2
     for k in [5,15,50]:
-        lentele[f"skirtumas[k]"] = (lentele[f"T{k}"] - lentele[f"C{k}"]).abs() 
+        lentele[f"skirtumas{k}"] =(lentele[f"T{k}"] - lentele[f"C{k}"]).abs() 
 
     suvestine = lentele.drop(columns="seed").groupby("n_components").agg(["mean","std"])
     suvestine.round(4).to_csv("python/results/umap/umap_dimensijos_suvestine.csv")
     print(suvestine[["TC15"]].round(4))
-    print("\nAnalize baigta.\nEksperimentas A2 baigtas.")
+    print("\nAnalize baigta.\nEksperimentas A2 baigtas.\n")
 
 def eksperimentasBirC(rinkinys,pavadinimai):
     print("hi")
@@ -135,26 +135,26 @@ def main():
     #EKSPERIMENTAS A2 su originaliu duomenų rinkiniu
     #Eksperimento tikslas - ištirti, prie kurios dimensijos geriausiai veikia pasirinkti parametrai
     #Tiriamas parametras - n_components, tiriamos 4 vertės: 2,3,5,10 ir 5 sėklos, praktiškai 20 kombinacijų
-    eksperimentasA2(X,pavadinimai)
+    #eksperimentasA2(X,pavadinimai)  #jau atlikta, rezultatai: python/results/umap/umap_dimensijos.csv
 
-    #EKSPERIMENTAS B su rinkiniu be išskirčių
-    #Eksperimento tikslas - ištirti pasirinktų parametrų jautrumą (kartu su eksperimentu C), įrodyti, kad parametrai teisingi
+    #EKSPERIMENTAS C su rinkiniu be išskirčių
+    #Eksperimento tikslas - ištirti pasirinktų parametrų jautrumą (kartu su eksperimentu B), įrodyti, kad parametrai teisingi
     #Tiriami tie patys parametrai su 5 sėklom
     #pasalinamos isskirtys
     q1=pozymiai.quantile(0.25)
     q3=pozymiai.quantile(0.75)
-    virsutine_riba=q3+7.5*(q3-q1) #naudojamas 7.5 iqr daugiklis, nes taip išlieka daugiausia Bombay realių duomenų, nepaliekant jokių realių išskirčių iš kitų klasių. (8 jau palieka, nors tikslesnis su Bombay)
+    virsutine_riba=q3+7.5*(q3-q1) #7.5 iqr: mažiausias praradimas, kai dar sugaunamos visos 104 ekstremalios eilutės (prarandama 21 reali BOMBAY). Su 8 iqr išlieka daugiau BOMBAY, bet praleidžiamos 43 ekstremalios eilutės
     
     isskirtis = (pozymiai > virsutine_riba).any(axis=1) #tikrinama kiekviena eilutė, any metodas pažymi EILUTĘ(axis 1) kaip išskirtį (priskiria prie isskirtis), jei tenkina salygą
     liko = ~isskirtis # ~ apverčia True į False, todėl pasirenkamos eilutės, kurios nėra išskirtys
 
-    pozymiai_b=pozymiai[liko] #pasirenku eilutes tik tas, kurios ne išskirtys
-    pavadinimai_b=pavadinimai[liko] 
+    pozymiai_c=pozymiai[liko] #pasirenku eilutes tik tas, kurios ne išskirtys
+    pavadinimai_c=pavadinimai[liko]
 
-    X = ((pozymiai_b - pozymiai_b.mean()) / pozymiai_b.std()).to_numpy()
-    eksperimentasBirC(X,pavadinimai_b)
+    X = ((pozymiai_c - pozymiai_c.mean()) / pozymiai_c.std()).to_numpy()
+    eksperimentasBirC(X,pavadinimai_c)
 
-    #EKSPERIMENTAS C su rinkiniu be išskirčių ir be koreliuotų požymių
+    #EKSPERIMENTAS B su rinkiniu be koreliuotų požymių (eilutės tos pačios)
     #randu koreliuotus požymius
     koreliacija = pozymiai.corr(method="spearman").abs() #aptinkame Spyrmano koreleaciją, teigiamą ar neigiamą.
     stulpeliai = list(pozymiai.columns) #apsirašau stulpelius
@@ -163,15 +163,15 @@ def main():
     for i, pirmas in enumerate(stulpeliai):
         if pirmas in KORELIUOTI: #praleidžiame jau pašalintą požymį
             continue
-        for antras in stulpeliai[i + 1:]: #antras visad = pirmas + 1 (: padaro, kad imtų visą stulpelį)
-            if koreliacija.loc[pirmas,antras] > 0.9 and antras not in KORELIUOTI: #.loc pasirenka to pačio stulpelio tas pačias eilutes palyginimui
+        for antras in stulpeliai[i + 1:]: #antras - visi stulpeliai po pirmo ([i + 1:] reiškia nuo i+1 iki galo)
+            if koreliacija.loc[pirmas,antras] > 0.9 and antras not in KORELIUOTI: #.loc paima vieną lentelės langelį: pirmo ir antro požymio koreliaciją
                 KORELIUOTI.append(antras)
 
     print(KORELIUOTI)
     #pašalinu koreliuotus požymius
-    pozymiai_c = pozymiai.drop(columns=KORELIUOTI)
+    pozymiai_b = pozymiai.drop(columns=KORELIUOTI)
 
-    X = ((pozymiai_c - pozymiai_c.mean()) / pozymiai_c.std()).to_numpy()
+    X = ((pozymiai_b - pozymiai_b.mean()) / pozymiai_b.std()).to_numpy()
     eksperimentasBirC(X, pavadinimai) #pavadinimai tie patys, nes jų skaičius nesikeičia (šalinami stulpeliai, o ne eilutės)
 
 main()
