@@ -210,8 +210,79 @@ def eksperimentasA3(X, pavadinimai):
     print(stab_suvestine.round(4))
     print("\nAnalize baigta.\nEksperimentas A3 baigtas.\n")
 
-def eksperimentasBirC(rinkinys,pavadinimai):
-    print("hi")
+def eksperimentasBirC(X_a, X_b, X_c, pavadinimai, pavadinimai_c, liko):
+    #Eksperimento tikslas - ištirti projekcijos jautrumą duomenų paruošimui: ar struktūrą lemia koreliuoti požymiai (B) ir ekstremalios išskirtys (C)
+    #B: be koreliuotų požymių, objektai tie patys -> lyginami tie patys objektai prieš ir po
+    #C: be išskirčių, objektų mažiau -> lyginami tik bendri objektai (Y_a[liko] su Y_c)
+    #visur naudojami geriausi parametrai, 2 dimensijos x 5 sėklos x 3 rinkiniai = 30 paleidimų
+    print("\nPradedamas eksperimentas B ir C - projekcijos jautrumas")
+    rezultatai = []
+    baze = [] #A vs A tarp sėklų - kas yra "normalu" (atskaitos taškas B ir C palyginimui)
+
+    for dimensija in TIRIAMOS_DIMENSIJOS:
+        projekcijos_a = {} #A projekcijos atskaitos taškui
+
+        for seed in SEKLOS:
+            Y_a = projekcija(X_a, seed, dimensija)
+            Y_b = projekcija(X_b, seed, dimensija)
+            Y_c = projekcija(X_c, seed, dimensija)
+            projekcijos_a[seed] = Y_a
+
+            eilute = {"n_components": dimensija, "seed": seed,
+                      "rho_AB": atstumu_koreliacija(Y_a, Y_b), #ar išliko atstumų tvarka po požymių pašalinimo
+                      "rho_AC": atstumu_koreliacija(Y_a[liko], Y_c)} #ar išliko bendrų objektų atstumų tvarka po išskirčių pašalinimo
+
+            for k in [5, 15, 50]:
+                #kiekvieno rinkinio projekcijos kokybė lyginant su jo paties duomenimis
+                for vardas, X, Y, pav in [("A", X_a, Y_a, pavadinimai), ("B", X_b, Y_b, pavadinimai), ("C", X_c, Y_c, pavadinimai_c)]:
+                    eilute[f"T{k}_{vardas}"] = trustworthiness(X, Y, n_neighbors=k)
+                    eilute[f"C{k}_{vardas}"] = trustworthiness(Y, X, n_neighbors=k)
+                    eilute[f"NH{k}_{vardas}"] = neighborhood_hit(Y, pav, k)
+
+                eilute[f"sutapimas{k}_AB"] = kaimynu_sutapimas(Y_a, Y_b, k) #kiek tų pačių kaimynų liko po požymių pašalinimo
+                eilute[f"sutapimas{k}_AC"] = kaimynu_sutapimas(Y_a[liko], Y_c, k) #kiek tų pačių kaimynų liko bendriems objektams
+            rezultatai.append(eilute)
+            print(dimensija, seed)
+
+            if dimensija == 2 and seed == SEKLOS[0]: #po vieną paveikslėlį, kitos sėklos skiriasi tik pasukimu
+                paveiksliukogeneravimas(Y_b, pavadinimai, f"UMAP B (be koreliuotų požymių), sėkla: {seed}", "B_2d")
+                paveiksliukogeneravimas(Y_c, pavadinimai_c, f"UMAP C (be išskirčių), sėkla: {seed}", "C_2d")
+
+        #atskaitos taškas: A vs A tarp skirtingų sėklų, visiems objektams (B) ir tik bendriems objektams (C)
+        for s1, s2 in combinations(SEKLOS, 2):
+            Y1, Y2 = projekcijos_a[s1], projekcijos_a[s2]
+            eilute = {"n_components": dimensija, "seed1": s1, "seed2": s2,
+                      "rho_AA": atstumu_koreliacija(Y1, Y2),
+                      "rho_AA_bendri": atstumu_koreliacija(Y1[liko], Y2[liko])}
+            for k in [5, 15, 50]:
+                eilute[f"sutapimas{k}_AA"] = kaimynu_sutapimas(Y1, Y2, k)
+                eilute[f"sutapimas{k}_AA_bendri"] = kaimynu_sutapimas(Y1[liko], Y2[liko], k)
+            baze.append(eilute)
+        print(dimensija, "atskaitos taskas apskaiciuotas")
+
+    lentele = pd.DataFrame(rezultatai)
+    lentele.to_csv("python/results/umap/umap_BC.csv", index=False)
+    baze_lentele = pd.DataFrame(baze)
+    baze_lentele.to_csv("python/results/umap/umap_BC_atskaita.csv", index=False)
+
+    print("Generavimas baigtas.\nPradedama analize.\n")
+    suvestine = lentele.drop(columns="seed").groupby("n_components").agg(["mean", "std"])
+    suvestine.round(4).to_csv("python/results/umap/umap_BC_suvestine.csv")
+    baze_suvestine = baze_lentele.drop(columns=["seed1", "seed2"]).groupby("n_components").agg(["mean", "std"])
+    baze_suvestine.round(4).to_csv("python/results/umap/umap_BC_atskaita_suvestine.csv")
+
+    #pagrindiniai palyginimai: B ir C prieš A vs A atskaitos tašką
+    palyginimas = pd.DataFrame({
+        "rho_AB": lentele.groupby("n_components")["rho_AB"].mean(),
+        "rho_AA": baze_lentele.groupby("n_components")["rho_AA"].mean(),
+        "sutapimas15_AB": lentele.groupby("n_components")["sutapimas15_AB"].mean(),
+        "sutapimas15_AA": baze_lentele.groupby("n_components")["sutapimas15_AA"].mean(),
+        "rho_AC": lentele.groupby("n_components")["rho_AC"].mean(),
+        "rho_AA_bendri": baze_lentele.groupby("n_components")["rho_AA_bendri"].mean(),
+        "sutapimas15_AC": lentele.groupby("n_components")["sutapimas15_AC"].mean(),
+        "sutapimas15_AA_bendri": baze_lentele.groupby("n_components")["sutapimas15_AA_bendri"].mean()})
+    print(palyginimas.round(4))
+    print("\nAnalize baigta.\nEksperimentas B ir C baigtas.\n")
 
 
 
@@ -238,7 +309,7 @@ def main():
 
     #EKSPERIMENTAS A3 su originaliu duomenų rinkiniu
     #Eksperimento tikslas - palyginti numatytuosius ir geriausius parametrus visomis metrikomis ir įvertinti stabilumą tarp sėklų
-    eksperimentasA3(X, pavadinimai)
+    #eksperimentasA3(X, pavadinimai)  #jau atlikta, rezultatai: python/results/umap/umap_A3_*.csv
 
     #EKSPERIMENTAS C su rinkiniu be išskirčių
     #Eksperimento tikslas - ištirti pasirinktų parametrų jautrumą (kartu su eksperimentu B), įrodyti, kad parametrai teisingi
@@ -249,13 +320,12 @@ def main():
     virsutine_riba=q3+7.5*(q3-q1) #7.5 iqr: mažiausias praradimas, kai dar sugaunamos visos 104 ekstremalios eilutės (prarandama 21 reali BOMBAY). Su 8 iqr išlieka daugiau BOMBAY, bet praleidžiamos 43 ekstremalios eilutės
     
     isskirtis = (pozymiai > virsutine_riba).any(axis=1) #tikrinama kiekviena eilutė, any metodas pažymi EILUTĘ(axis 1) kaip išskirtį (priskiria prie isskirtis), jei tenkina salygą
-    liko = ~isskirtis # ~ apverčia True į False, todėl pasirenkamos eilutės, kurios nėra išskirtys
+    liko = (~isskirtis).to_numpy() # ~ apverčia True į False, todėl pasirenkamos eilutės, kurios nėra išskirtys. to_numpy - kad tiktų indeksuoti projekcijas Y_a[liko]
 
     pozymiai_c=pozymiai[liko] #pasirenku eilutes tik tas, kurios ne išskirtys
     pavadinimai_c=pavadinimai[liko]
 
-    X = ((pozymiai_c - pozymiai_c.mean()) / pozymiai_c.std()).to_numpy()
-    eksperimentasBirC(X,pavadinimai_c)
+    X_c = ((pozymiai_c - pozymiai_c.mean()) / pozymiai_c.std()).to_numpy()
 
     #EKSPERIMENTAS B su rinkiniu be koreliuotų požymių (eilutės tos pačios)
     #randu koreliuotus požymius
@@ -274,7 +344,10 @@ def main():
     #pašalinu koreliuotus požymius
     pozymiai_b = pozymiai.drop(columns=KORELIUOTI)
 
-    X = ((pozymiai_b - pozymiai_b.mean()) / pozymiai_b.std()).to_numpy()
-    eksperimentasBirC(X, pavadinimai) #pavadinimai tie patys, nes jų skaičius nesikeičia (šalinami stulpeliai, o ne eilutės)
+    X_b = ((pozymiai_b - pozymiai_b.mean()) / pozymiai_b.std()).to_numpy()
+
+    #EKSPERIMENTAS B ir C: visi trys rinkiniai paleidžiami kartu, kad kiekvienai sėklai būtų galima palyginti A su B ir A su C
+    #B naudoja tuos pačius pavadinimus (šalinami stulpeliai, o ne eilutės), C - atfiltruotus pavadinimai_c
+    eksperimentasBirC(X, X_b, X_c, pavadinimai, pavadinimai_c, liko)
 
 main()
