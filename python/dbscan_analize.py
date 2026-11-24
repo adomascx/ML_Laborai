@@ -1,5 +1,4 @@
 import pandas as pd
-from sklearn.preprocessing import RobustScaler
 
 # 1 ŽINGSNIS: duomenų nuskaitymas ir paruošimas
 
@@ -26,9 +25,9 @@ for i, pirmas in enumerate(stulpeliai):
 
 pozymiai = pozymiai.drop(columns=koreliuoti)
 
-# normavimas RobustScaler: (reikšmė - mediana) / IQR
-# naudojamas, nes duomenyse daug išskirčių (užduoties 5 skaidrė)
-X = RobustScaler().fit_transform(pozymiai)
+# standartizavimas: (reikšmė - vidurkis) / standartinis nuokrypis, ta pati formulė kaip umap_analize.py
+# .to_numpy paverčia lentelę paprastu skaičių masyvu
+X = ((pozymiai - pozymiai.mean()) / pozymiai.std()).to_numpy()
 
 print("Objektų skaičius:", X.shape[0])
 print("Pašalinti požymiai:", koreliuoti)
