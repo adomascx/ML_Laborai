@@ -12,6 +12,7 @@ uv-cache/
 # Generated outputs
 python/results/figs/
 python/results/umap/
+python/results/dbscan/
 python/results/mds/
 python/results/pca/
 
