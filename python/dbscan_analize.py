@@ -1,4 +1,13 @@
+import os
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.neighbors import NearestNeighbors  # artimiausių kaimynų paieškai (kelio metodui)
+
+os.makedirs("python/results/dbscan/figs/", exist_ok=True)  # vieta rezultatams ir paveikslėliams
+
+# tiriamos min_samples reikšmės: taisyklė ~2 * požymių skaičius (8 požymiai -> 16), plius mažesnės palyginimui
+MIN_SAMPLES = [4, 8, 16]
 
 # 1 ŽINGSNIS: duomenų nuskaitymas ir paruošimas
 
@@ -33,3 +42,48 @@ print("Objektų skaičius:", X.shape[0])
 print("Pašalinti požymiai:", koreliuoti)
 print("Likę požymiai:", list(pozymiai.columns))
 print("Klasės:", pd.Series(klases).value_counts().to_dict())
+
+
+# 2 ŽINGSNIS: eps parinkimas kelio (knee) metodu
+def EksperimentasA1(X):
+    # Eksperimento tikslas - kiekvienai min_samples reikšmei rasti tinkamą eps
+    # Idėja: kiekvienam taškui randame atstumą iki min_samples-ojo kaimyno ir surūšiuojame.
+    # Tankiose vietose atstumai maži (kreivė plokščia), atskirtuose taškuose - staigiai išauga.
+    # Vieta, kur kreivė "lūžta" (kelias), yra geras eps: taškai arčiau už jį laikomi kaimynais.
+
+    rezultatai = []
+    fig, asys = plt.subplots(1, len(MIN_SAMPLES), figsize=(15, 4))
+
+    for ax, min_samples in zip(asys, MIN_SAMPLES):
+        # n_neighbors=min_samples, nes pirmasis rastas "kaimynas" yra pats taškas,
+        # o DBSCAN min_samples taip pat įskaičiuoja patį tašką
+        atstumai, _ = NearestNeighbors(n_neighbors=min_samples).fit(X).kneighbors(X)
+        atstumai = np.sort(atstumai[:, -1])  # paskutinis stulpelis - atstumas iki tolimiausio iš min_samples kaimynų
+
+        # kelio taškas: abi ašis sunormuojame į [0;1], tada tiesė tarp kreivės galų yra y = x.
+        # Kelias - taškas, kuris labiausiai nutolęs žemyn nuo tos tiesės, t.y. didžiausias (x - y)
+        x = np.linspace(0, 1, len(atstumai))
+        y = (atstumai - atstumai[0]) / (atstumai[-1] - atstumai[0])
+        kelias = np.argmax(x - y)
+        eps = atstumai[kelias]
+
+        rezultatai.append({"min_samples": min_samples, "eps": eps})
+        print(f"min_samples={min_samples}: eps={eps:.3f}")
+
+        ax.plot(atstumai)
+        ax.axhline(eps, linestyle="--", color="grey")
+        ax.scatter(kelias, eps, color="red", zorder=3)  # zorder - kad taškas būtų virš linijos
+        ax.set_title(f"min_samples={min_samples}, eps={eps:.3f}")
+        ax.set_xlabel("Taškai, surūšiuoti pagal atstumą")
+        ax.set_ylabel(f"Atstumas iki {min_samples}-ojo kaimyno")
+
+    fig.suptitle("Kelio metodas: eps parinkimas (originali erdvė)")
+    fig.tight_layout()
+    fig.savefig("python/results/dbscan/figs/A1_kelio_metodas.png", dpi=150)
+    plt.close(fig)
+
+    pd.DataFrame(rezultatai).to_csv("python/results/dbscan/A1_eps.csv", index=False)
+    return rezultatai
+
+
+EksperimentasA1(X)
