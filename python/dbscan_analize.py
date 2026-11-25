@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors  # artimiausių kaimynų paieškai (kelio metodui)
+from sklearn.cluster import DBSCAN
 
 os.makedirs("python/results/dbscan/figs/", exist_ok=True)  # vieta rezultatams ir paveikslėliams
 
@@ -86,4 +87,33 @@ def EksperimentasA1(X):
     return rezultatai
 
 
-EksperimentasA1(X)
+# 3 ŽINGSNIS: DBSCAN paleidimas originalioje erdvėje
+def EksperimentasA2(X, klases, parametrai):
+    # Eksperimento tikslas - su A1 rastais (min_samples, eps) paleisti DBSCAN ir pažiūrėti:
+    # kiek klasterių susidarė, kiek taškų pažymėta triukšmu ir kurios klasės pateko į kuriuos klasterius
+    # DBSCAN kiekvienam taškui grąžina klasterio numerį (0, 1, 2, ...) arba -1, jei taškas yra triukšmas
+
+    suvestine = []
+    for p in parametrai:
+        zymes = DBSCAN(eps=p["eps"], min_samples=p["min_samples"]).fit_predict(X)
+
+        klasteriu_sk = len(set(zymes) - {-1})  # skirtingi numeriai, išskyrus triukšmą
+        triuksmas = np.mean(zymes == -1)  # triukšmo taškų dalis (True=1, False=0, vidurkis = dalis)
+
+        print(f"\nmin_samples={p['min_samples']}, eps={p['eps']:.3f}: "
+              f"klasterių {klasteriu_sk}, triukšmas {triuksmas:.1%}")
+
+        # kryžminė lentelė: eilutės - DBSCAN klasteriai, stulpeliai - tikros klasės
+        lentele = pd.crosstab(zymes, klases, rownames=["klasteris"], colnames=["klasė"])
+        print(lentele)
+        lentele.to_csv(f"python/results/dbscan/A2_klasteriai_ms{p['min_samples']}.csv")
+
+        suvestine.append({"min_samples": p["min_samples"], "eps": p["eps"],
+                          "klasteriu_sk": klasteriu_sk, "triuksmas": triuksmas})
+
+    pd.DataFrame(suvestine).to_csv("python/results/dbscan/A2_suvestine.csv", index=False)
+    return suvestine
+
+
+parametrai = EksperimentasA1(X)
+EksperimentasA2(X, klases, parametrai)
