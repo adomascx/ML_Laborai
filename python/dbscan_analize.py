@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors  # artimiausių kaimynų paieškai (kelio metodui)
 from sklearn.cluster import DBSCAN
+from sklearn.metrics import silhouette_score, adjusted_rand_score
 
 os.makedirs("python/results/dbscan/figs/", exist_ok=True)  # vieta rezultatams ir paveikslėliams
 
@@ -115,5 +116,76 @@ def EksperimentasA2(X, klases, parametrai):
     return suvestine
 
 
+# 4 ŽINGSNIS: parametrų jautrumas
+EPS_DAUGIKLIAI = [0.5, 0.75, 1.0, 1.25, 1.5]  # eps = daugiklis * kelio metodu rastas eps
+
+
+def EksperimentasA3(X, klases, parametrai):
+    # Eksperimento tikslas - ištirti, kaip keičiasi rezultatai keičiant eps ir min_samples (užduoties 8 skaidrė)
+    # Kiekvienai min_samples reikšmei eps imame aplink kelio tašką: nuo 0.5x iki 1.5x
+    # Kiekvienam deriniui fiksuojame:
+    #   klasterių skaičių, triukšmo dalį,
+    #   silhouette (skaičiuojamas BE triukšmo taškų, nes triukšmas nėra klasteris; reikia bent 2 klasterių),
+    #   ARI su tikromis klasėmis (1 - sutampa visiškai, 0 - ne geriau nei atsitiktinai)
+
+    eilutes = []
+    for p in parametrai:
+        for daugiklis in EPS_DAUGIKLIAI:
+            eps = p["eps"] * daugiklis
+            zymes = DBSCAN(eps=eps, min_samples=p["min_samples"]).fit_predict(X)
+
+            klasteriu_sk = len(set(zymes) - {-1})
+            triuksmas = np.mean(zymes == -1)
+
+            be_triuksmo = zymes != -1  # True tiems taškams, kurie priklauso klasteriui
+            if klasteriu_sk >= 2:
+                silhouette = silhouette_score(X[be_triuksmo], zymes[be_triuksmo])
+            else:
+                silhouette = np.nan  # su vienu klasteriu silhouette neapibrėžtas
+
+            ari = adjusted_rand_score(klases, zymes)  # triukšmas (-1) čia laikomas atskira grupe
+
+            eilutes.append({"min_samples": p["min_samples"], "daugiklis": daugiklis, "eps": eps,
+                            "klasteriu_sk": klasteriu_sk, "triuksmas": triuksmas,
+                            "silhouette": silhouette, "ARI_klases": ari})
+            print(f"min_samples={p['min_samples']:>2}, eps={eps:.3f} (x{daugiklis}): "
+                  f"klasterių {klasteriu_sk:>2}, triukšmas {triuksmas:6.1%}, "
+                  f"silhouette {silhouette:.3f}, ARI {ari:.3f}")
+
+    lentele = pd.DataFrame(eilutes)
+    lentele.to_csv("python/results/dbscan/A3_jautrumas.csv", index=False)
+
+    # heatmap'ai: eilutės - min_samples, stulpeliai - eps daugiklis, langelyje - mato reikšmė
+    matai = {"klasteriu_sk": "Klasterių skaičius", "triuksmas": "Triukšmo dalis",
+             "silhouette": "Silhouette (be triukšmo)", "ARI_klases": "ARI su klasėmis"}
+    fig, asys = plt.subplots(1, len(matai), figsize=(20, 4))
+    for ax, (stulpelis, pavadinimas) in zip(asys, matai.items()):
+        tinklelis = lentele.pivot(index="min_samples", columns="daugiklis", values=stulpelis)
+        ax.imshow(tinklelis.to_numpy(dtype=float), cmap="viridis", aspect="auto")
+        ax.set_xticks(range(len(EPS_DAUGIKLIAI)), [f"x{d}" for d in EPS_DAUGIKLIAI])
+        ax.set_yticks(range(len(tinklelis.index)), tinklelis.index)
+        ax.set_xlabel("eps daugiklis (x kelio taškas)")
+        ax.set_ylabel("min_samples")
+        ax.set_title(pavadinimas)
+        # skaičiai langeliuose
+        for i in range(tinklelis.shape[0]):
+            for j in range(tinklelis.shape[1]):
+                reiksme = tinklelis.iat[i, j]
+                if pd.isna(reiksme):
+                    tekstas = "-"
+                elif stulpelis == "klasteriu_sk":
+                    tekstas = f"{reiksme:.0f}"
+                else:
+                    tekstas = f"{reiksme:.2f}"
+                ax.text(j, i, tekstas, ha="center", va="center", color="white")
+    fig.suptitle("DBSCAN parametrų jautrumas (originali erdvė)")
+    fig.tight_layout()
+    fig.savefig("python/results/dbscan/figs/A3_jautrumas.png", dpi=150)
+    plt.close(fig)
+
+    return lentele
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
+EksperimentasA3(X, klases, parametrai)
