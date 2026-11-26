@@ -389,6 +389,31 @@ def EksperimentasB2(erdves, X, klases, atskaita):
     return lentele, galutines_zymes
 
 
+def klasteriu_grafikai(erdves, galutines_zymes):
+    # vienas paveikslas su visomis erdvėmis (kaip užduoties 18 skaidrė), triukšmas - pilki taškai
+    # aukštesnės dimensijos erdvės piešiamos savo 2D "sesers" koordinatėse:
+    #   Originali ir PCA 4D -> PCA 2D, MDS 4D -> MDS 2D, UMAP 5D -> UMAP 2D
+    piesimo_erdve = {"Originali": "PCA 2D", "PCA 2D": "PCA 2D", "PCA 4D": "PCA 2D",
+                     "MDS 2D": "MDS 2D", "MDS 4D": "MDS 2D", "UMAP 2D": "UMAP 2D", "UMAP 5D": "UMAP 2D"}
+    fig, asys = plt.subplots(2, 4, figsize=(20, 9))
+    asys = asys.flatten()
+    for ax, (pavadinimas, zymes) in zip(asys, galutines_zymes.items()):
+        Y2 = erdves[piesimo_erdve[pavadinimas]]
+        triuksmas = zymes == -1
+        ax.scatter(Y2[triuksmas, 0], Y2[triuksmas, 1], s=4, c="lightgrey", label="triukšmas")
+        ax.scatter(Y2[~triuksmas, 0], Y2[~triuksmas, 1], s=4, c=zymes[~triuksmas], cmap="tab10", vmin=0, vmax=9)
+        ax.set_title(f"{pavadinimas} (piešta {piesimo_erdve[pavadinimas]})\n"
+                     f"k={len(set(zymes) - {-1})}, triukšmas {triuksmas.mean():.1%}")
+        ax.set_xticks([])
+        ax.set_yticks([])
+    for ax in asys[len(galutines_zymes):]:
+        ax.axis("off")  # tušti langeliai
+    fig.suptitle("DBSCAN rezultatai skirtingose erdvėse (pilki taškai - triukšmas)")
+    fig.tight_layout()
+    fig.savefig("python/results/dbscan/figs/B2_klasteriai.png", dpi=150)
+    plt.close(fig)
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
 EksperimentasA3(X, klases, parametrai)
@@ -397,3 +422,4 @@ EksperimentasA5(df, pozymiai, klases, atskaita)
 
 erdves = EksperimentasB1(X)
 rezultatai, galutines_zymes = EksperimentasB2(erdves, X, klases, atskaita)
+klasteriu_grafikai(erdves, galutines_zymes)
