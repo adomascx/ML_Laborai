@@ -4,7 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors  # artimiausių kaimynų paieškai (kelio metodui)
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import silhouette_score, adjusted_rand_score
+from sklearn.metrics import (silhouette_score, silhouette_samples, calinski_harabasz_score,
+                             davies_bouldin_score, adjusted_rand_score, normalized_mutual_info_score)
+from datetime import date
 
 os.makedirs("python/results/dbscan/figs/", exist_ok=True)  # vieta rezultatams ir paveikslėliams
 
@@ -186,6 +188,50 @@ def EksperimentasA3(X, klases, parametrai):
     return lentele
 
 
+# 5 ŽINGSNIS: galutinio rezultato kokybė (vidiniai matai)
+GALUTINIS_MIN_SAMPLES = 8  # pasirinkta pagal EksperimentasA3 (eps = kelio taškas, daugiklis x1.0)
+
+
+def EksperimentasA4(X, klases, parametrai):
+    # Eksperimento tikslas - įvertinti galutinį originalios erdvės rezultatą. Jis bus ATSKAITA,
+    # su kuria vėliau lyginsime klasterizavimą sumažintose erdvėse.
+    # Vidiniai matai (skaičiuojami BE triukšmo):
+    #   Silhouette ↑ - kaip gerai taškas tinka savo klasteriui, palyginus su artimiausiu kitu (-1..1)
+    #   Calinski-Harabasz ↑ - sklaida TARP klasterių / sklaida klasterių VIDUJE
+    #   Davies-Bouldin ↓ - kiek klasteriai panašūs į artimiausią kaimyną (0 = visiškai atskirti)
+    # Papildomai (turime tikras klases): ARI ir NMI su klasėmis
+
+    eps = next(p["eps"] for p in parametrai if p["min_samples"] == GALUTINIS_MIN_SAMPLES)  # A1 kelio taškas
+    zymes = DBSCAN(eps=eps, min_samples=GALUTINIS_MIN_SAMPLES).fit_predict(X)
+
+    be_triuksmo = zymes != -1
+    Xb, zb = X[be_triuksmo], zymes[be_triuksmo]
+
+    eilute = {"erdve": "Originali", "algoritmas": "DBSCAN",
+              "parametrai": f"eps={eps:.3f}, min_samples={GALUTINIS_MIN_SAMPLES}",
+              "k": len(set(zb)), "triuksmas": np.mean(~be_triuksmo),
+              "silhouette": silhouette_score(Xb, zb),
+              "CH": calinski_harabasz_score(Xb, zb),
+              "DB": davies_bouldin_score(Xb, zb),
+              "ARI_klases": adjusted_rand_score(klases, zymes),
+              "NMI_klases": normalized_mutual_info_score(klases, zymes),
+              "data": date.today().isoformat()}
+
+    print("\nGalutinis rezultatas (originali erdvė):")
+    for raktas, reiksme in eilute.items():
+        print(f"  {raktas}: {reiksme:.3f}" if isinstance(reiksme, float) else f"  {raktas}: {reiksme}")
+
+    # silhouette kiekvienam klasteriui atskirai: parodo, kurie klasteriai gerai susiformavę, o kurie ne
+    s = silhouette_samples(Xb, zb)
+    print("\nSilhouette pagal klasterius:")
+    for k in sorted(set(zb)):
+        print(f"  klasteris {k}: {s[zb == k].mean():.3f} (taškų {np.sum(zb == k)})")
+
+    pd.DataFrame([eilute]).to_csv("python/results/dbscan/A4_atskaita.csv", index=False)
+    return zymes
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
 EksperimentasA3(X, klases, parametrai)
+atskaita = EksperimentasA4(X, klases, parametrai)
