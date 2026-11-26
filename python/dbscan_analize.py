@@ -231,7 +231,37 @@ def EksperimentasA4(X, klases, parametrai):
     return zymes
 
 
+# 9 ŽINGSNIS (originali erdvė): klasterių profiliai ir triukšmo analizė
+def EksperimentasA5(df, pozymiai, klases, zymes):
+    # Eksperimento tikslas - apibūdinti, kuo skiriasi klasteriai (užduoties 8 punktas),
+    # ir patikrinti, ar triukšmas / mažas klasteris yra README minimos iškraipytos eilutės.
+    # Iškraipyta eilutė - kai nesutampa formulės (README "Žinomos valymo kodo klaidos" 1 ir 2 punktai):
+    #   Area turi būti = pi/4 * EquivDiameter^2
+    #   MajorAxisLength turi būti = AspectRation * MinorAxisLength
+    # Leidžiame 5 % paklaidą (su 1 % ir 5 % randama tiek pat - 104 eilutės, t.y. riba aiški)
+
+    blogas_area = np.abs(df["Area"] / (np.pi / 4 * df["EquivDiameter"] ** 2) - 1) > 0.05
+    blogas_major = np.abs(df["MajorAxisLength"] / (df["AspectRation"] * df["MinorAxisLength"]) - 1) > 0.05
+    iskraipyta = (blogas_area | blogas_major).to_numpy()
+    print(f"\nIškraipytų eilučių: {iskraipyta.sum()} (Area {blogas_area.sum()}, MajorAxisLength {blogas_major.sum()})")
+
+    # kur pateko iškraipytos eilutės?
+    lentele = pd.crosstab(zymes, iskraipyta, rownames=["klasteris"], colnames=["iškraipyta"])
+    print(lentele)
+    lentele.to_csv("python/results/dbscan/A5_iskraipytos.csv")
+
+    # klasterių profiliai: medianos ORIGINALIAIS vienetais (ne standartizuotos), kad būtų galima interpretuoti
+    profiliai = pozymiai.groupby(zymes).median()
+    profiliai.insert(0, "tasku_sk", pd.Series(zymes).value_counts().sort_index().to_numpy())
+    profiliai.index.name = "klasteris"
+    print("\nKlasterių medianos (originalūs vienetai):")
+    print(profiliai.round(3).T)
+    profiliai.to_csv("python/results/dbscan/A5_profiliai.csv")
+    return iskraipyta
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
 EksperimentasA3(X, klases, parametrai)
 atskaita = EksperimentasA4(X, klases, parametrai)
+EksperimentasA5(df, pozymiai, klases, atskaita)
