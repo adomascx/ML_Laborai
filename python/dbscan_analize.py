@@ -8,6 +8,7 @@ from sklearn.metrics import (silhouette_score, silhouette_samples, calinski_hara
                              davies_bouldin_score, adjusted_rand_score, normalized_mutual_info_score)
 from sklearn.decomposition import PCA
 from sklearn.manifold import MDS
+from scipy.optimize import linear_sum_assignment  # klasterių numerių suderinimui tarp dviejų rezultatų
 import umap
 from datetime import date
 
@@ -295,6 +296,99 @@ def EksperimentasB1(X):
     return erdves
 
 
+def poru_jaccard(a, b):
+    # porų Jaccard indeksas: imame visas taškų poras.
+    # J = poros, kurios kartu ABIEJUOSE rezultatuose / poros, kurios kartu BENT VIENAME
+    # (sklearn jaccard_score netinka - jis lygina žymių numerius, o klasterių numeriai tarp rezultatų skiriasi)
+    n = pd.crosstab(a, b).to_numpy().astype(np.int64)
+    kartu_abiejuose = (n * (n - 1) // 2).sum()
+    kartu_a = (n.sum(axis=1) * (n.sum(axis=1) - 1) // 2).sum()
+    kartu_b = (n.sum(axis=0) * (n.sum(axis=0) - 1) // 2).sum()
+    return kartu_abiejuose / (kartu_a + kartu_b - kartu_abiejuose)
+
+
+def sutampantys_taskai(a, b):
+    # kiek taškų yra "tame pačiame" klasteryje abiejuose rezultatuose (užduoties 10 skaidrė)
+    # klasterių numeriai skiriasi (0 viename gali būti 2 kitame), todėl pirma suderiname numerius taip,
+    # kad sutampančių taškų būtų kuo daugiau (linear_sum_assignment), tada sudedame
+    lentele = pd.crosstab(a, b).to_numpy()
+    eilutes, stulpeliai = linear_sum_assignment(-lentele)  # minuso ženklas - nes funkcija ieško minimumo
+    return lentele[eilutes, stulpeliai].sum()
+
+
+# 7 ŽINGSNIS: DBSCAN kiekvienoje erdvėje
+def EksperimentasB2(erdves, X, klases, atskaita):
+    # Eksperimento tikslas - suklasterizuoti kiekvieną erdvę ir palyginti su originalios erdvės rezultatu.
+    # Parametrai kiekvienoje erdvėje parenkami IŠ NAUJO (atstumų skalė kiekvienoje erdvėje skirtinga):
+    #   tas pats tinklelis kaip A3 (min_samples x eps daugiklis aplink kelio tašką),
+    #   ir ta pati taisyklė pasirinkimui (BE tikrų klasių): triukšmas <= 10 %, bent 2 klasteriai,
+    #   iš jų - didžiausias silhouette. Originalioje erdvėje ši taisyklė parenka tą patį (8, x1.0).
+
+    rezultatai = []
+    galutines_zymes = {}
+    for pavadinimas, Y in erdves.items():
+        # parametrų paieška šioje erdvėje
+        paieska = []
+        for min_samples in MIN_SAMPLES:
+            atstumai, _ = NearestNeighbors(n_neighbors=min_samples).fit(Y).kneighbors(Y)
+            atstumai = np.sort(atstumai[:, -1])
+            x = np.linspace(0, 1, len(atstumai))
+            y = (atstumai - atstumai[0]) / (atstumai[-1] - atstumai[0])
+            eps_kelio = atstumai[np.argmax(x - y)]
+
+            for daugiklis in EPS_DAUGIKLIAI:
+                zymes = DBSCAN(eps=eps_kelio * daugiklis, min_samples=min_samples).fit_predict(Y)
+                klasteriu_sk = len(set(zymes) - {-1})
+                be_triuksmo = zymes != -1
+                sil = silhouette_score(Y[be_triuksmo], zymes[be_triuksmo]) if klasteriu_sk >= 2 else np.nan
+                paieska.append({"min_samples": min_samples, "daugiklis": daugiklis, "eps": eps_kelio * daugiklis,
+                                "klasteriu_sk": klasteriu_sk, "triuksmas": np.mean(~be_triuksmo),
+                                "silhouette": sil, "zymes": zymes})
+
+        paieska_df = pd.DataFrame(paieska)
+        paieska_df.drop(columns="zymes").to_csv(f"python/results/dbscan/B2_paieska_{pavadinimas}.csv", index=False)
+
+        # pasirinkimo taisyklė
+        tinkami = paieska_df[(paieska_df["triuksmas"] <= 0.10) & (paieska_df["klasteriu_sk"] >= 2)]
+        geriausias = tinkami.loc[tinkami["silhouette"].idxmax()]
+        zymes = geriausias["zymes"]
+        galutines_zymes[pavadinimas] = zymes
+
+        # matai
+        be_triuksmo = zymes != -1
+        Yb, zb = Y[be_triuksmo], zymes[be_triuksmo]
+        eilute = {"erdve": pavadinimas, "algoritmas": "DBSCAN",
+                  "parametrai": f"eps={geriausias['eps']:.3f}, min_samples={geriausias['min_samples']}",
+                  "k": geriausias["klasteriu_sk"], "triuksmas": geriausias["triuksmas"],
+                  # vidiniai matai SAVO erdvėje
+                  "silhouette": silhouette_score(Yb, zb),
+                  "CH": calinski_harabasz_score(Yb, zb),
+                  "DB": davies_bouldin_score(Yb, zb),
+                  # silhouette tų pačių žymių, bet ORIGINALIOJE erdvėje - sąžiningas palyginimas (UMAP dirbtinai jį padidina)
+                  "silhouette_orig": silhouette_score(X[be_triuksmo], zb),
+                  # išoriniai matai lyginant su atskaita (DBSCAN originalioje erdvėje)
+                  "ARI": adjusted_rand_score(atskaita, zymes),
+                  "NMI": normalized_mutual_info_score(atskaita, zymes),
+                  "Jaccard": poru_jaccard(atskaita, zymes),
+                  "sutampa_tasku": sutampantys_taskai(atskaita, zymes),
+                  # papildomai - su tikromis klasėmis
+                  "ARI_klases": adjusted_rand_score(klases, zymes),
+                  "NMI_klases": normalized_mutual_info_score(klases, zymes),
+                  "data": date.today().isoformat()}
+        rezultatai.append(eilute)
+
+        print(f"\n{pavadinimas}: {eilute['parametrai']} -> k={eilute['k']}, triukšmas {eilute['triuksmas']:.1%}, "
+              f"silhouette {eilute['silhouette']:.3f} (orig. erdvėje {eilute['silhouette_orig']:.3f}), "
+              f"ARI su atskaita {eilute['ARI']:.3f}, sutampa {eilute['sutampa_tasku']}/{len(zymes)}")
+        lentele = pd.crosstab(zymes, klases, rownames=["klasteris"], colnames=["klasė"])
+        print(lentele)
+        lentele.to_csv(f"python/results/dbscan/B2_klasteriai_{pavadinimas}.csv")
+
+    lentele = pd.DataFrame(rezultatai)
+    lentele.to_csv("python/results/dbscan/B2_rezultatai.csv", index=False)
+    return lentele, galutines_zymes
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
 EksperimentasA3(X, klases, parametrai)
@@ -302,3 +396,4 @@ atskaita = EksperimentasA4(X, klases, parametrai)
 EksperimentasA5(df, pozymiai, klases, atskaita)
 
 erdves = EksperimentasB1(X)
+rezultatai, galutines_zymes = EksperimentasB2(erdves, X, klases, atskaita)
