@@ -10,6 +10,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import MDS
 from scipy.optimize import linear_sum_assignment  # klasterių numerių suderinimui tarp dviejų rezultatų
 import umap
+from itertools import combinations  # visos imčių poros stabilumo palyginimui
 from datetime import date
 
 os.makedirs("python/results/dbscan/figs/", exist_ok=True)  # vieta rezultatams ir paveikslėliams
@@ -359,6 +360,8 @@ def EksperimentasB2(erdves, X, klases, atskaita):
         Yb, zb = Y[be_triuksmo], zymes[be_triuksmo]
         eilute = {"erdve": pavadinimas, "algoritmas": "DBSCAN",
                   "parametrai": f"eps={geriausias['eps']:.3f}, min_samples={geriausias['min_samples']}",
+                  # atskirai - kad stabilumo eksperimentas (C1) galėtų pakartoti tą patį pasirinkimą
+                  "min_samples": int(geriausias["min_samples"]), "daugiklis": geriausias["daugiklis"],
                   "k": geriausias["klasteriu_sk"], "triuksmas": geriausias["triuksmas"],
                   # vidiniai matai SAVO erdvėje
                   "silhouette": silhouette_score(Yb, zb),
@@ -414,6 +417,114 @@ def klasteriu_grafikai(erdves, galutines_zymes):
     plt.close(fig)
 
 
+# 8 ŽINGSNIS: stabilumas (užduoties 13-15 skaidrės)
+IMCIU_SK = 20  # N = 20 imčių, random_state = 0..19
+STABILUMO_ERDVES = ["Originali", "PCA 2D", "PCA 4D", "UMAP 2D", "UMAP 5D"]  # MDS praleistas - per lėtas (~1 min/kartą)
+
+
+def sumazinti(Xs, pavadinimas, seed):
+    # dimensijos mažinimas vienai imčiai - tie patys nustatymai kaip EksperimentasB1
+    if pavadinimas == "Originali":
+        return Xs
+    metodas, dimensija = pavadinimas.split()  # "PCA 4D" -> "PCA", "4D"
+    d = int(dimensija[:-1])  # "4D" -> 4
+    if metodas == "PCA":
+        return PCA(n_components=d).fit_transform(Xs)
+    return umap.UMAP(n_neighbors=15, min_dist=0.0, n_components=d, random_state=seed, n_jobs=1).fit_transform(Xs)
+
+
+def kelio_eps(Y, min_samples):
+    # tas pats kelio metodas kaip EksperimentasA1
+    atstumai, _ = NearestNeighbors(n_neighbors=min_samples).fit(Y).kneighbors(Y)
+    atstumai = np.sort(atstumai[:, -1])
+    x = np.linspace(0, 1, len(atstumai))
+    y = (atstumai - atstumai[0]) / (atstumai[-1] - atstumai[0])
+    return atstumai[np.argmax(x - y)]
+
+
+def EksperimentasC1(pozymiai, rezultatai):
+    # Eksperimento tikslas - patikrinti, ar klasteriai išlieka tie patys, kai duomenys šiek tiek keičiasi.
+    # Kiekvienai imčiai (seed = 0..N-1) VISKAS daroma iš naujo (15 skaidrė):
+    #   80 % eilučių -> standartizavimas pagal imtį -> dimensijos mažinimas -> eps kelio metodu -> DBSCAN
+    # (jei dimensiją sumažintume vieną kartą visiems duomenims, stabilumas būtų pervertintas)
+    # min_samples ir eps daugiklis - tie patys, kuriuos B2 parinko kiekvienai erdvei.
+    # Požymių rinkinys (8 požymiai) fiksuotas - koreliuotų požymių šalinimas nekartojamas.
+    # Palyginimas: visos imčių poros (N*(N-1)/2 = 190), ARI/NMI/Jaccard TIK bendriems objektams (14 skaidrė)
+
+    parinkta = rezultatai.set_index("erdve")
+    poros, vidiniai = [], []
+
+    for pavadinimas in STABILUMO_ERDVES:
+        min_samples = int(parinkta.loc[pavadinimas, "min_samples"])
+        daugiklis = parinkta.loc[pavadinimas, "daugiklis"]
+        print(f"\nStabilumas: {pavadinimas} (min_samples={min_samples}, eps = kelio taškas x{daugiklis})")
+
+        imciu_zymes = []  # kiekvienai imčiai: pd.Series, indeksas - originalus eilutės numeris df
+        for seed in range(IMCIU_SK):
+            imtis = pozymiai.sample(frac=0.8, random_state=seed)
+            Xs = ((imtis - imtis.mean()) / imtis.std()).to_numpy()  # standartizuojama pagal IMTĮ
+            Y = sumazinti(Xs, pavadinimas, seed)
+            eps = kelio_eps(Y, min_samples) * daugiklis
+            zymes = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(Y)
+            imciu_zymes.append(pd.Series(zymes, index=imtis.index))
+
+            # vidiniai matai kiekvienai imčiai (be triukšmo)
+            be_triuksmo = zymes != -1
+            klasteriu_sk = len(set(zymes) - {-1})
+            if klasteriu_sk >= 2:
+                Yb, zb = Y[be_triuksmo], zymes[be_triuksmo]
+                sil, ch, db = silhouette_score(Yb, zb), calinski_harabasz_score(Yb, zb), davies_bouldin_score(Yb, zb)
+            else:
+                sil = ch = db = np.nan
+            vidiniai.append({"erdve": pavadinimas, "seed": seed, "eps": eps, "k": klasteriu_sk,
+                             "triuksmas": np.mean(~be_triuksmo), "silhouette": sil, "CH": ch, "DB": db})
+
+        # visų porų palyginimas tik bendriems objektams
+        for i, j in combinations(range(IMCIU_SK), 2):
+            bendri = imciu_zymes[i].index.intersection(imciu_zymes[j].index)  # objektai, esantys abiejose imtyse
+            a, b = imciu_zymes[i].loc[bendri], imciu_zymes[j].loc[bendri]  # derinama pagal indeksą, ne pagal eilės nr.
+            poros.append({"erdve": pavadinimas, "i": i, "j": j, "bendru": len(bendri),
+                          "ARI": adjusted_rand_score(a, b), "NMI": normalized_mutual_info_score(a, b),
+                          "Jaccard": poru_jaccard(a, b)})
+
+        p = pd.DataFrame([x for x in poros if x["erdve"] == pavadinimas])
+        print(f"  ARI {p['ARI'].mean():.3f} ± {p['ARI'].std():.3f} (min {p['ARI'].min():.3f}), "
+              f"bendrų objektų vidutiniškai {p['bendru'].mean():.0f}")
+
+    poros = pd.DataFrame(poros)
+    vidiniai = pd.DataFrame(vidiniai)
+    poros.to_csv("python/results/dbscan/C1_poros.csv", index=False)
+    vidiniai.to_csv("python/results/dbscan/C1_imtys.csv", index=False)
+
+    # suvestinė: vidurkis ± st. nuokrypis kiekvienai erdvei (15 skaidrė)
+    suvestine = pd.concat([poros.groupby("erdve")[["ARI", "NMI", "Jaccard"]].agg(["mean", "std", "min"]),
+                           vidiniai.groupby("erdve")[["k", "triuksmas", "silhouette", "CH", "DB"]].agg(["mean", "std"])],
+                          axis=1).loc[STABILUMO_ERDVES]
+    suvestine.to_csv("python/results/dbscan/C1_suvestine.csv")
+    print("\n", suvestine.round(3).T)
+
+    # 1 grafikas: ARI pasiskirstymas (boxplot) kiekvienai erdvei
+    # 2 grafikas: ar imčių pakanka - ARI vidurkis naudojant pirmas n imčių (n = 5, 10, 15, 20)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4.5))
+    ax1.boxplot([poros.loc[poros["erdve"] == e, "ARI"] for e in STABILUMO_ERDVES], tick_labels=STABILUMO_ERDVES)
+    ax1.set_ylabel("ARI tarp imčių porų")
+    ax1.set_title(f"Stabilumas: ARI per visas {IMCIU_SK * (IMCIU_SK - 1) // 2} imčių poras")
+    for e in STABILUMO_ERDVES:
+        pe = poros[poros["erdve"] == e]
+        n_reiksmes = [5, 10, 15, 20]
+        vidurkiai = [pe[(pe["i"] < n) & (pe["j"] < n)]["ARI"].mean() for n in n_reiksmes]
+        ax2.plot(n_reiksmes, vidurkiai, marker="o", label=e)
+    ax2.set_xlabel("Imčių skaičius N")
+    ax2.set_ylabel("ARI vidurkis")
+    ax2.set_title("Ar imčių pakanka? (vidurkis turi nusistovėti)")
+    ax2.legend()
+    fig.tight_layout()
+    fig.savefig("python/results/dbscan/figs/C1_stabilumas.png", dpi=150)
+    plt.close(fig)
+
+    return suvestine
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
 EksperimentasA3(X, klases, parametrai)
@@ -423,3 +534,5 @@ EksperimentasA5(df, pozymiai, klases, atskaita)
 erdves = EksperimentasB1(X)
 rezultatai, galutines_zymes = EksperimentasB2(erdves, X, klases, atskaita)
 klasteriu_grafikai(erdves, galutines_zymes)
+
+EksperimentasC1(pozymiai, rezultatai)
