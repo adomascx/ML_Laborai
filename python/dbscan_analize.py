@@ -6,6 +6,9 @@ from sklearn.neighbors import NearestNeighbors  # artimiausių kaimynų paieška
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import (silhouette_score, silhouette_samples, calinski_harabasz_score,
                              davies_bouldin_score, adjusted_rand_score, normalized_mutual_info_score)
+from sklearn.decomposition import PCA
+from sklearn.manifold import MDS
+import umap
 from datetime import date
 
 os.makedirs("python/results/dbscan/figs/", exist_ok=True)  # vieta rezultatams ir paveikslėliams
@@ -260,8 +263,42 @@ def EksperimentasA5(df, pozymiai, klases, zymes):
     return iskraipyta
 
 
+# 6 ŽINGSNIS: dimensijos mažinimas
+# kiekvienam metodui: 2D (vizualizacijai) + geriausia 2 laboratorinio dimensija
+#   PCA 4D, MDS 4D (classical_mds pradžia) - pagal PCA_analize.py ir MDS_analize.py
+#   UMAP 5D (n_neighbors=15, min_dist=0.0) - pagal umap_analize.py
+# t-SNE bus pridėtas, kai grupė jį užbaigs
+SEKLA = 0  # fiksuota sėkla, kad rezultatai būtų atkartojami
+ERDVIU_FAILAS = "python/results/dbscan/erdves.npz"
+
+
+def EksperimentasB1(X):
+    # Visos sumažintos erdvės skaičiuojamos iš TOS PAČIOS paruoštos matricos X (užduoties 5 skaidrė).
+    # MDS užtrunka ~1 min, todėl erdvės išsaugomos faile ir kitą kartą tiesiog nuskaitomos.
+    # (jei pakeisite paruošimą ar parametrus - ištrinkite erdves.npz!)
+    if os.path.exists(ERDVIU_FAILAS):
+        print("\nErdvės nuskaitomos iš", ERDVIU_FAILAS)
+        return dict(np.load(ERDVIU_FAILAS))
+
+    erdves = {"Originali": X}
+    for d in [2, 4]:
+        erdves[f"PCA {d}D"] = PCA(n_components=d).fit_transform(X)
+    for d in [2, 4]:
+        print(f"Skaičiuojamas MDS {d}D...")
+        erdves[f"MDS {d}D"] = MDS(n_components=d, metric_mds=True, metric="euclidean",
+                                  init="classical_mds", n_init=1, random_state=SEKLA).fit_transform(X)
+    for d in [2, 5]:
+        erdves[f"UMAP {d}D"] = umap.UMAP(n_neighbors=15, min_dist=0.0, n_components=d,
+                                         random_state=SEKLA, n_jobs=1).fit_transform(X)
+
+    np.savez(ERDVIU_FAILAS, **erdves)
+    return erdves
+
+
 parametrai = EksperimentasA1(X)
 EksperimentasA2(X, klases, parametrai)
 EksperimentasA3(X, klases, parametrai)
 atskaita = EksperimentasA4(X, klases, parametrai)
 EksperimentasA5(df, pozymiai, klases, atskaita)
+
+erdves = EksperimentasB1(X)
